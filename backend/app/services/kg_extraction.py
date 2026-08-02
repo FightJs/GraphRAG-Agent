@@ -64,14 +64,14 @@ def _try_recover_json(content: str) -> dict | None:
     return None
 
 
-async def _extract_chunk(chunk_text: str) -> dict:
+async def _extract_chunk(api_key: str, chunk_text: str) -> dict:
     messages = [
         {"role": "system", "content": _SYSTEM_PROMPT},
         {"role": "user", "content": chunk_text[:4000]},
     ]
     try:
         content, _usage = await llm_client.chat_complete(
-            messages, temperature=0.0, max_tokens=4096, response_format_json=True
+            api_key, messages, temperature=0.0, max_tokens=4096, response_format_json=True
         )
         logger.debug("LLM raw response (%d chars): %s", len(content), content[:200])
         data = _try_recover_json(content)
@@ -132,14 +132,14 @@ def _merge_chunk_results(chunk_results: list[dict]) -> dict:
     return {"nodes": list(merged_nodes.values()), "edges": merged_edges}
 
 
-async def extract_kg(doc_id: str, chunks: list[str]) -> dict:
+async def extract_kg(doc_id: str, chunks: list[str], api_key: str) -> dict:
     """对文档分块逐个调用 LLM 抽取，合并为知识图谱 JSON"""
     selected = chunks[:MAX_CHUNKS_FOR_KG]
     chunk_results = []
     for chunk_text in selected:
         if not chunk_text.strip():
             continue
-        chunk_results.append(await _extract_chunk(chunk_text))
+        chunk_results.append(await _extract_chunk(api_key, chunk_text))
     merged = _merge_chunk_results(chunk_results)
     return {
         "doc_id": doc_id,

@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     MINERU_BASE_URL: str = "https://mineru.net/api/v4"
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     OPENROUTER_EMBEDDING_MODEL: str = "qwen/qwen3-embedding-8b"
+    MOCK_EXTERNAL_SERVICES: bool = False
 
     PORT: int = 8000
 

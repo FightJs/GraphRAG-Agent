@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.config import settings
 from app.models.db_models import Document, IndexTask
-from app.services import parsing_service, kg_extraction, llm_client
+from app.services import parsing_service, kg_extraction, key_vault_service
 
 STAGES = [
     {"name": "parse",    "label": "文档解析"},
@@ -69,7 +69,7 @@ async def start_index_task(db: AsyncSession, doc_id: str, owner_id: str) -> Inde
     db.add(task)
     await db.commit()
     await db.refresh(task)
-    asyncio.create_task(_run_pipeline(doc_id, task.task_id, doc.original_name, doc.file_path, doc.file_format))
+    asyncio.create_task(_run_pipeline(doc_id, task.task_id, doc.original_name, doc.file_path, doc.file_format, owner_id))
     return task
 
 async def _advance_stage(db: AsyncSession, task_id: str, index: int) -> bool:
@@ -99,13 +99,13 @@ async def _fail_task(db: AsyncSession, doc_id: str, task_id: str, message: str):
         task.error_message = message
         await db.commit()
 
-async def _run_pipeline(doc_id: str, task_id: str, original_name: str, file_path: str, file_format: str):
+async def _run_pipeline(doc_id: str, task_id: str, original_name: str, file_path: str, file_format: str, owner_id: str):
     """5阶段索引 Pipeline（后台运行）。配置了 DEEPSEEK_API_KEY 时走真实解析+LLM抽取，否则走 mock。"""
     from app.database import AsyncSessionLocal
-    use_llm = llm_client.llm_available()
-
     async with AsyncSessionLocal() as db:
         try:
+            deepseek_key = await key_vault_service.get_verified_secret(db, owner_id, "deepseek")
+            use_llm = not settings.MOCK_EXTERNAL_SERVICES
             # Stage 0: parse — 提取原始文本
             if use_llm:
                 text, page_count = parsing_service.extract_text(file_path, file_format)
@@ -132,7 +132,7 @@ async def _run_pipeline(doc_id: str, task_id: str, original_name: str, file_path
 
             # Stage 3: kg — 知识图谱抽取
             if use_llm and chunks:
-                kg = await kg_extraction.extract_kg(doc_id, chunks)
+                kg = await kg_extraction.extract_kg(doc_id, chunks, deepseek_key)
             elif use_llm:
                 kg = {"doc_id": doc_id, "nodes": [], "edges": [], "meta": {"total_nodes": 0, "total_edges": 0, "created_at": datetime.utcnow().isoformat() + "Z"}}
             else:

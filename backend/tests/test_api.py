@@ -9,6 +9,8 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 
 from app.main import app
+from app.database import AsyncSessionLocal
+from app.services import key_vault_service
 
 BASE = "http://test"
 
@@ -35,6 +37,12 @@ async def auth_headers(client):
     resp = await client.post("/api/v2/auth/login", json={"email": TEST_USER["email"], "password": TEST_USER["password"]})
     assert resp.status_code == 200
     token = resp.json()["data"]["access_token"]
+    me = await client.get("/api/v2/auth/me", headers={"Authorization": f"Bearer {token}"})
+    async with AsyncSessionLocal() as db:
+        for provider in ("deepseek", "mineru", "embedding"):
+            await key_vault_service.store_verified_key(
+                db, me.json()["data"]["user_id"], provider, f"test-{provider}-credential"
+            )
     return {"Authorization": f"Bearer {token}"}
 
 @pytest.fixture(scope="session")

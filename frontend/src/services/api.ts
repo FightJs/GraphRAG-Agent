@@ -4,6 +4,7 @@ import type {
   AuthResponse, User, KnowledgeBase, KBCreatePayload,
   Document, IndexTask, KGGraph, KGOperation, QAHistory, FeedbackPayload,
   Webhook, WebhookCreatePayload,
+  ApiKeyProvider, ApiKeyStatus,
 } from '@/types'
 
 const http = axios.create({ baseURL: '/api', timeout: 30_000 })
@@ -135,6 +136,13 @@ export const webhookApi = {
   update: (id: string, p: Partial<WebhookCreatePayload>) =>
     http.patch<{ data: Webhook }>(`/v2/webhooks/${id}`, p).then(d<Webhook>),
   delete: (id: string) => http.delete(`/v2/webhooks/${id}`),
+}
+
+export const apiKeyApi = {
+  status: () => http.get<{ data: ApiKeyStatus }>('/v2/settings/api-keys').then(d<ApiKeyStatus>),
+  save: (provider: ApiKeyProvider, api_key: string) =>
+    http.put(`/v2/settings/api-keys/${provider}`, { api_key }).then(r => r.data),
+  remove: (provider: ApiKeyProvider) => http.delete(`/v2/settings/api-keys/${provider}`),
 }
 
 export default http

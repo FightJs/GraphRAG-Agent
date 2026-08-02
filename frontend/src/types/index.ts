@@ -15,6 +15,21 @@ export interface AuthResponse {
   user: User
 }
 
+export type ApiKeyProvider = 'deepseek' | 'mineru' | 'embedding'
+
+export interface ProviderStatus {
+  provider: ApiKeyProvider
+  configured: boolean
+  is_verified: boolean
+  key_hint: string | null
+  verified_at: string | null
+}
+
+export interface ApiKeyStatus {
+  providers: ProviderStatus[]
+  ready: boolean
+}
+
 // ───────────────────────── 知识库 ─────────────────────────
 export interface KnowledgeBase {
   kb_id: string

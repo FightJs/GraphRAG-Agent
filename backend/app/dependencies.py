@@ -6,6 +6,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.database import get_db
 from app.models.db_models import User
+from app.services import key_vault_service
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -43,4 +44,16 @@ async def get_refresh_token_user(
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=401, detail={"code": 4012, "msg": "用户不存在"})
+    return user
+
+
+async def require_provider_readiness(
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> User:
+    missing = await key_vault_service.missing_providers(db, user.user_id)
+    if missing:
+        raise HTTPException(
+            status_code=428,
+            detail={"code": 4281, "msg": "请先完成全部 API Key 配置", "missing_providers": missing},
+        )
     return user

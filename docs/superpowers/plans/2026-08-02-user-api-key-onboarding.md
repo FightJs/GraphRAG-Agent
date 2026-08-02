@@ -87,6 +87,7 @@ Expected: import failure for `UserApiKey` or `key_vault_service` because neither
 dependencies = [
     # existing dependencies
     "cryptography>=43.0.0",
+    "greenlet>=3.0.0",
 ]
 ```
 

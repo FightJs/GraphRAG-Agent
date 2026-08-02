@@ -100,6 +100,68 @@ async def test_store_key_masks_short_secret_hints(db_session, test_user):
     assert status.key_hint != secret
 
 
+async def test_business_api_requires_all_verified_providers(client):
+    suffix = uuid.uuid4().hex
+    payload = {
+        "username": f"gate{suffix[:16]}",
+        "email": f"gate-{suffix}@example.test",
+        "password": "TestPass123",
+    }
+    response = await client.post("/api/v2/auth/register", json=payload)
+    token = response.json()["data"]["access_token"]
+    response = await client.get("/api/v2/kbs", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 428
+    assert set(response.json()["detail"]["missing_providers"]) == {"deepseek", "mineru", "embedding"}
+
+
+async def test_settings_api_saves_verified_key_and_never_returns_plaintext(client, monkeypatch):
+    suffix = uuid.uuid4().hex
+    registration = await client.post(
+        "/api/v2/auth/register",
+        json={"username": f"keys{suffix[:16]}", "email": f"keys-{suffix}@example.test", "password": "TestPass123"},
+    )
+    headers = {"Authorization": f"Bearer {registration.json()['data']['access_token']}"}
+
+    async def accept(provider: str, api_key: str) -> None:
+        return None
+
+    monkeypatch.setattr(key_vault_service, "verify_provider", accept)
+    secret = "secret-9876"
+    response = await client.put(
+        "/api/v2/settings/api-keys/deepseek", json={"api_key": secret}, headers=headers
+    )
+    assert response.status_code == 200
+    assert secret not in response.text
+
+    response = await client.get("/api/v2/settings/api-keys", headers=headers)
+    assert response.status_code == 200
+    assert secret not in response.text
+    deepseek = next(item for item in response.json()["data"]["providers"] if item["provider"] == "deepseek")
+    assert deepseek["key_hint"] == "9876"
+
+
+async def test_settings_api_does_not_persist_a_rejected_key(client, monkeypatch):
+    suffix = uuid.uuid4().hex
+    registration = await client.post(
+        "/api/v2/auth/register",
+        json={"username": f"reject{suffix[:14]}", "email": f"reject-{suffix}@example.test", "password": "TestPass123"},
+    )
+    headers = {"Authorization": f"Bearer {registration.json()['data']['access_token']}"}
+
+    async def reject(provider: str, api_key: str) -> None:
+        raise ValueError("验证失败：凭据无效")
+
+    monkeypatch.setattr(key_vault_service, "verify_provider", reject)
+    response = await client.put(
+        "/api/v2/settings/api-keys/mineru", json={"api_key": "invalid-credential"}, headers=headers
+    )
+    assert response.status_code == 422
+    response = await client.get("/api/v2/settings/api-keys", headers=headers)
+    mineru = next(item for item in response.json()["data"]["providers"] if item["provider"] == "mineru")
+    assert mineru["configured"] is False
+
+
 @pytest.mark.parametrize("encryption_key", ["", "not-a-valid-fernet-key"])
 def test_encrypt_requires_valid_deployment_key_without_exposing_secret(monkeypatch, encryption_key):
     secret = "test-secret-not-for-errors"

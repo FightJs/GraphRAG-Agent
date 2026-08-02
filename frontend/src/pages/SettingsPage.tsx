@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/authStore'
 import { useToast } from '@/hooks/useToast'
-import { webhookApi } from '@/services/api'
-import type { WebhookCreatePayload } from '@/types'
+import { apiKeyApi, webhookApi } from '@/services/api'
+import type { ApiKeyProvider, WebhookCreatePayload } from '@/types'
 import { User, Lock, Key, Bell, Webhook, Plus, Trash2, Construction, ExternalLink } from 'lucide-react'
 
 function UndevelopedBadge({ text = '后端接口未实现' }: { text?: string }) {
@@ -20,6 +20,8 @@ export default function SettingsPage() {
   const toast = useToast()
   const qc = useQueryClient()
   const [activeTab, setActiveTab] = useState('profile')
+  const [selectedProvider, setSelectedProvider] = useState<ApiKeyProvider>('deepseek')
+  const [apiKey, setApiKey] = useState('')
 
   // Webhook form state
   const [whUrl, setWhUrl] = useState('')
@@ -65,6 +67,24 @@ export default function SettingsPage() {
   const toggleEvent = (ev: string) => {
     setWhEvents(prev => prev.includes(ev) ? prev.filter(e => e !== ev) : [...prev, ev])
   }
+
+  const { data: keyStatus, isLoading: keyLoading } = useQuery({
+    queryKey: ['api-key-status'], queryFn: apiKeyApi.status, enabled: activeTab === 'apikey',
+  })
+  const saveKeyMut = useMutation({
+    mutationFn: () => apiKeyApi.save(selectedProvider, apiKey),
+    onSuccess: () => {
+      setApiKey('')
+      qc.invalidateQueries({ queryKey: ['api-key-status'] })
+      toast.success('密钥验证并保存成功')
+    },
+    onError: (error: any) => toast.error(error?.response?.data?.detail?.msg ?? '密钥验证失败，请检查后重试'),
+  })
+  const deleteKeyMut = useMutation({
+    mutationFn: apiKeyApi.remove,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['api-key-status'] }); toast.success('密钥已删除') },
+    onError: () => toast.error('删除密钥失败'),
+  })
 
   return (
     <div className="h-full flex">
@@ -135,21 +155,39 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* API Key — 仅展示，无需后端接口 */}
+        {/* API Key */}
         {activeTab === 'apikey' && (
-          <div className="max-w-lg">
-            <h2 className="text-xl font-bold text-tp mb-2">API Key</h2>
-            <p className="text-sm text-ts mb-6">API Key 由系统管理员通过 <code className="bg-bg px-1 rounded text-xs">backend/.env</code> 配置，前端无法直接查看或修改。</p>
-            <div className="bg-bg border border-border rounded-xl p-5 space-y-3">
-              {['DeepSeek API', 'MinerU API', 'Embedding API'].map(name => (
-                <div key={name} className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-tp">{name}</p>
-                    <p className="text-xs text-ts font-mono">sk-**********************</p>
+          <div className="max-w-xl">
+            <h2 className="text-xl font-bold text-tp mb-2">连接服务</h2>
+            <p className="text-sm text-ts mb-6">完成三项凭据验证后，知识库、索引和问答功能才会开放。保存后仅显示末四位提示。</p>
+            <div className="space-y-2 mb-6">
+              {[
+                ['deepseek', 'DeepSeek', '用于知识图谱抽取与问答'],
+                ['mineru', 'MinerU', '用于云端文档解析验证'],
+                ['embedding', 'OpenRouter Embedding', 'qwen/qwen3-embedding-8b'],
+              ].map(([provider, label, description]) => {
+                const status = keyStatus?.providers.find(item => item.provider === provider)
+                return <button key={provider} onClick={() => setSelectedProvider(provider as ApiKeyProvider)}
+                  className={`w-full text-left border px-4 py-3 rounded-lg transition-colors ${selectedProvider === provider ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div><p className="text-sm font-semibold text-tp">{label}</p><p className="text-xs text-ts mt-1">{description}</p></div>
+                    <div className="flex items-center gap-2">
+                      {status?.configured && <span className="text-xs font-mono text-ts">••••{status.key_hint}</span>}
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${status?.is_verified ? 'bg-green-100 text-success' : 'bg-bg text-ts'}`}>{status?.is_verified ? '已验证' : '未配置'}</span>
+                      {status?.configured && <span onClick={(event) => { event.stopPropagation(); deleteKeyMut.mutate(provider as ApiKeyProvider) }} className="text-danger hover:underline text-xs">删除</span>}
+                    </div>
                   </div>
-                  <span className="text-xs bg-green-100 text-success px-2 py-0.5 rounded-full font-semibold">已配置</span>
-                </div>
-              ))}
+                </button>
+              })}
+            </div>
+            <div className="border border-border rounded-lg p-5 space-y-3">
+              <div><p className="text-sm font-semibold text-tp">添加 {selectedProvider === 'deepseek' ? 'DeepSeek' : selectedProvider === 'mineru' ? 'MinerU' : 'OpenRouter Embedding'} 密钥</p><p className="text-xs text-ts mt-1">将先进行服务端验证，验证成功后才会加密保存。</p></div>
+              <input type="password" value={apiKey} onChange={event => setApiKey(event.target.value)} autoComplete="off" placeholder="粘贴 API Key"
+                className="w-full h-10 px-3 border border-border rounded-lg text-sm focus:outline-none focus:border-primary" />
+              <button onClick={() => saveKeyMut.mutate()} disabled={apiKey.length < 8 || saveKeyMut.isPending || keyLoading}
+                className="h-10 px-5 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary-hover disabled:opacity-50">
+                {saveKeyMut.isPending ? '验证中...' : '验证并保存'}
+              </button>
             </div>
           </div>
         )}

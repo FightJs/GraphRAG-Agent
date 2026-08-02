@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.config import settings
 from app.models.db_models import Document, QARecord
-from app.services import llm_client
+from app.services import key_vault_service, llm_client
 
 _QA_SYSTEM_PROMPT = """你是专业的文档问答助手。请仅根据下方提供的知识图谱信息和文档片段回答用户问题。
 要求：
@@ -94,7 +94,8 @@ async def qa_stream(db: AsyncSession, doc_id: str, question: str, user_id: str, 
     kg = json.loads(kp.read_text(encoding="utf-8"))
     query_id = str(uuid.uuid4())
 
-    if llm_client.llm_available():
+    deepseek_key = await key_vault_service.get_verified_secret(db, user_id, "deepseek")
+    if not settings.MOCK_EXTERNAL_SERVICES and llm_client.llm_available(deepseek_key):
         context = _build_llm_context(kg, _load_chunks(doc_id), question)
         messages = [
             {"role": "system", "content": _QA_SYSTEM_PROMPT},
@@ -103,7 +104,7 @@ async def qa_stream(db: AsyncSession, doc_id: str, question: str, user_id: str, 
         full_answer = ""
         usage = {"input_tokens": 0, "output_tokens": 0}
         try:
-            async for event in llm_client.chat_stream(messages):
+            async for event in llm_client.chat_stream(deepseek_key, messages):
                 if "delta" in event:
                     full_answer += event["delta"]
                     payload = json.dumps({"query_id": query_id, "content": event["delta"], "finish_reason": None}, ensure_ascii=False)
@@ -145,14 +146,15 @@ async def qa_sync(db: AsyncSession, doc_id: str, question: str, user_id: str, re
         raise ValueError("4043:KG数据不存在")
     kg = json.loads(kp.read_text(encoding="utf-8"))
 
-    if llm_client.llm_available():
+    deepseek_key = await key_vault_service.get_verified_secret(db, user_id, "deepseek")
+    if not settings.MOCK_EXTERNAL_SERVICES and llm_client.llm_available(deepseek_key):
         context = _build_llm_context(kg, _load_chunks(doc_id), question)
         messages = [
             {"role": "system", "content": _QA_SYSTEM_PROMPT},
             {"role": "user", "content": f"{context}\n\n用户问题: {question}"},
         ]
         try:
-            full_answer, usage = await llm_client.chat_complete(messages, temperature=0.2, max_tokens=1500)
+            full_answer, usage = await llm_client.chat_complete(deepseek_key, messages, temperature=0.2, max_tokens=1500)
         except Exception as e:
             raise ValueError(f"5002:LLM调用失败: {e}")
         if not full_answer.strip():
@@ -173,8 +175,9 @@ async def qa_sync(db: AsyncSession, doc_id: str, question: str, user_id: str, re
 
 async def kb_qa_stream(db: AsyncSession, kb_id: str, doc_ids: list[str], question: str, user_id: str, retrieval_mode: str = "hybrid") -> AsyncGenerator[str, None]:
     query_id = str(uuid.uuid4())
+    deepseek_key = await key_vault_service.get_verified_secret(db, user_id, "deepseek")
 
-    if llm_client.llm_available():
+    if not settings.MOCK_EXTERNAL_SERVICES and llm_client.llm_available(deepseek_key):
         contexts = []
         sources = []
         for doc_id in doc_ids[:10]:
@@ -200,7 +203,7 @@ async def kb_qa_stream(db: AsyncSession, kb_id: str, doc_ids: list[str], questio
         full_answer = ""
         usage = {"input_tokens": 0, "output_tokens": 0}
         try:
-            async for event in llm_client.chat_stream(messages):
+            async for event in llm_client.chat_stream(deepseek_key, messages):
                 if "delta" in event:
                     full_answer += event["delta"]
                     payload = json.dumps({"query_id": query_id, "content": event["delta"], "finish_reason": None}, ensure_ascii=False)

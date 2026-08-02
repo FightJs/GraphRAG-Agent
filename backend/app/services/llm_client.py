@@ -7,11 +7,11 @@ import httpx
 from app.config import settings
 
 
-def llm_available() -> bool:
-    return bool(settings.DEEPSEEK_API_KEY)
+def llm_available(api_key: str) -> bool:
+    return bool(api_key)
 
 
-async def chat_complete(messages: list[dict], temperature: float = 0.2, max_tokens: int = 2048,
+async def chat_complete(api_key: str, messages: list[dict], temperature: float = 0.2, max_tokens: int = 2048,
                          response_format_json: bool = False) -> tuple[str, dict]:
     """非流式调用，返回 (content, {input_tokens, output_tokens})"""
     payload: dict = {
@@ -26,7 +26,7 @@ async def chat_complete(messages: list[dict], temperature: float = 0.2, max_toke
     async with httpx.AsyncClient(timeout=90.0) as client:
         resp = await client.post(
             f"{settings.DEEPSEEK_BASE_URL}/chat/completions",
-            headers={"Authorization": f"Bearer {settings.DEEPSEEK_API_KEY}"},
+            headers={"Authorization": f"Bearer {api_key}"},
             json=payload,
         )
         resp.raise_for_status()
@@ -39,7 +39,7 @@ async def chat_complete(messages: list[dict], temperature: float = 0.2, max_toke
     }
 
 
-async def chat_stream(messages: list[dict], temperature: float = 0.3, max_tokens: int = 2048) -> AsyncGenerator[dict, None]:
+async def chat_stream(api_key: str, messages: list[dict], temperature: float = 0.3, max_tokens: int = 2048) -> AsyncGenerator[dict, None]:
     """流式调用，逐个 yield {"delta": str} 或最终 {"done": True, "usage": {...}}"""
     payload = {
         "model": "deepseek-chat",
@@ -54,7 +54,7 @@ async def chat_stream(messages: list[dict], temperature: float = 0.3, max_tokens
         async with client.stream(
             "POST",
             f"{settings.DEEPSEEK_BASE_URL}/chat/completions",
-            headers={"Authorization": f"Bearer {settings.DEEPSEEK_API_KEY}"},
+            headers={"Authorization": f"Bearer {api_key}"},
             json=payload,
         ) as resp:
             resp.raise_for_status()

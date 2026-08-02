@@ -15,6 +15,7 @@ import app.config as _cfg
 _cfg.settings.DATABASE_URL = f"sqlite+aiosqlite:///{_TEST_DB}"
 # 测试环境始终使用 mock 管线，不消耗真实 LLM 额度，也不依赖真实文件解析
 _cfg.settings.DEEPSEEK_API_KEY = ""
+_cfg.settings.MOCK_EXTERNAL_SERVICES = True
 
 from app.database import engine, AsyncSessionLocal, Base, get_db, init_db
 from app.main import app

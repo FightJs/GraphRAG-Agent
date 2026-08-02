@@ -2,12 +2,15 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from cryptography.fernet import Fernet
+import httpx
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.db_models import UserApiKey
+
+SUPPORTED_PROVIDERS = ("deepseek", "mineru", "embedding")
 
 
 @dataclass(frozen=True)
@@ -91,3 +94,107 @@ async def store_verified_key(
         is_verified=row.is_verified,
         verified_at=row.verified_at,
     )
+
+
+def status_to_dict(status: StoredKeyStatus) -> dict:
+    return {
+        "provider": status.provider,
+        "configured": True,
+        "is_verified": status.is_verified,
+        "key_hint": status.key_hint,
+        "verified_at": status.verified_at,
+    }
+
+
+async def get_statuses(db: AsyncSession, user_id: str) -> dict:
+    result = await db.execute(select(UserApiKey).where(UserApiKey.user_id == user_id))
+    rows = {row.provider: row for row in result.scalars()}
+    providers = []
+    for provider in SUPPORTED_PROVIDERS:
+        row = rows.get(provider)
+        providers.append(
+            {
+                "provider": provider,
+                "configured": row is not None,
+                "is_verified": bool(row and row.is_verified),
+                "key_hint": row.key_hint if row else None,
+                "verified_at": row.verified_at if row else None,
+            }
+        )
+    return {"providers": providers, "ready": all(p["is_verified"] for p in providers)}
+
+
+async def missing_providers(db: AsyncSession, user_id: str) -> list[str]:
+    statuses = await get_statuses(db, user_id)
+    return [item["provider"] for item in statuses["providers"] if not item["is_verified"]]
+
+
+async def delete_key(db: AsyncSession, user_id: str, provider: str) -> None:
+    result = await db.execute(
+        select(UserApiKey).where(UserApiKey.user_id == user_id, UserApiKey.provider == provider)
+    )
+    row = result.scalar_one_or_none()
+    if row is not None:
+        await db.delete(row)
+        await db.commit()
+
+
+async def get_verified_secret(db: AsyncSession, user_id: str, provider: str) -> str:
+    result = await db.execute(
+        select(UserApiKey).where(
+            UserApiKey.user_id == user_id,
+            UserApiKey.provider == provider,
+            UserApiKey.is_verified.is_(True),
+        )
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        raise ValueError(f"缺少已验证的 {provider} API Key")
+    return decrypt_secret(row.encrypted_secret)
+
+
+async def verify_provider(provider: str, api_key: str) -> None:
+    try:
+        if provider == "deepseek":
+            await _verify_deepseek(api_key)
+        elif provider == "mineru":
+            await _verify_mineru(api_key)
+        elif provider == "embedding":
+            await _verify_openrouter_embedding(api_key)
+        else:
+            raise ValueError("不支持的 API Key 类型")
+    except httpx.HTTPError as exc:
+        raise ValueError("验证失败：凭据无效或服务暂不可用") from exc
+
+
+async def _verify_deepseek(api_key: str) -> None:
+    payload = {"model": "deepseek-chat", "messages": [{"role": "user", "content": "ping"}], "max_tokens": 1}
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post(
+            f"{settings.DEEPSEEK_BASE_URL}/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}"}, json=payload,
+        )
+    response.raise_for_status()
+
+
+async def _verify_mineru(api_key: str) -> None:
+    pdf = b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 0>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF"
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post(
+            f"{settings.MINERU_BASE_URL}/extract/task",
+            headers={"Authorization": f"Bearer {api_key}"},
+            files={"file": ("credential-check.pdf", pdf, "application/pdf")},
+        )
+    response.raise_for_status()
+
+
+async def _verify_openrouter_embedding(api_key: str) -> None:
+    payload = {"model": settings.OPENROUTER_EMBEDDING_MODEL, "input": "GraphRAG health check"}
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post(
+            f"{settings.OPENROUTER_BASE_URL}/embeddings",
+            headers={"Authorization": f"Bearer {api_key}"}, json=payload,
+        )
+    response.raise_for_status()
+    if not response.json().get("data"):
+        raise ValueError("验证失败：Embedding 服务未返回向量")
