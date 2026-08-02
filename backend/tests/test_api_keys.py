@@ -162,6 +162,70 @@ async def test_settings_api_does_not_persist_a_rejected_key(client, monkeypatch)
     assert mineru["configured"] is False
 
 
+async def test_mineru_verification_checks_a_nonexistent_task_without_creating_work(monkeypatch):
+    captured: dict = {}
+
+    class Response:
+        status_code = 404
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+        async def get(self, url, *, headers):
+            captured.update(url=url, headers=headers)
+            return Response()
+
+    monkeypatch.setattr(key_vault_service.httpx, "AsyncClient", lambda **_: Client())
+
+    await key_vault_service._verify_mineru("test-mineru-token")
+
+    assert captured["url"].endswith("/extract/task/00000000-0000-4000-8000-000000000000")
+    assert captured["headers"] == {"Authorization": "Bearer test-mineru-token"}
+
+
+async def test_mineru_verification_rejects_an_unauthorized_token(monkeypatch):
+    class Response:
+        status_code = 401
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+        async def get(self, url, *, headers):
+            return Response()
+
+    monkeypatch.setattr(key_vault_service.httpx, "AsyncClient", lambda **_: Client())
+
+    with pytest.raises(ValueError, match="无效或已过期"):
+        await key_vault_service._verify_mineru("invalid-token")
+
+
+async def test_mineru_verification_accepts_a_authenticated_provider_validation_error(monkeypatch):
+    class Response:
+        status_code = 400
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+        async def get(self, url, *, headers):
+            return Response()
+
+    monkeypatch.setattr(key_vault_service.httpx, "AsyncClient", lambda **_: Client())
+
+    await key_vault_service._verify_mineru("authenticated-token")
+
+
 @pytest.mark.parametrize("encryption_key", ["", "not-a-valid-fernet-key"])
 def test_encrypt_requires_valid_deployment_key_without_exposing_secret(monkeypatch, encryption_key):
     secret = "test-secret-not-for-errors"
