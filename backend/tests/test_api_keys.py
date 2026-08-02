@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 
 import pytest
@@ -57,6 +58,35 @@ async def test_store_key_upserts_the_same_owner_provider(db_session, test_user):
     assert rows[0].key_id == first.key_id == second.key_id
     assert rows[0].key_hint == "5678"
     assert key_vault_service.decrypt_secret(rows[0].encrypted_secret) == "replacement-5678"
+
+
+async def test_concurrent_first_time_saves_keep_one_provider_row(test_user):
+    async def save(secret: str):
+        async with AsyncSessionLocal() as session:
+            return await key_vault_service.store_verified_key(
+                session, test_user.user_id, "embedding", secret
+            )
+
+    first, second = await asyncio.gather(
+        save("concurrent-first-1234"),
+        save("concurrent-second-5678"),
+    )
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(UserApiKey).where(
+                UserApiKey.user_id == test_user.user_id,
+                UserApiKey.provider == "embedding",
+            )
+        )
+        rows = list(result.scalars())
+
+    assert len(rows) == 1
+    assert first.key_id == second.key_id == rows[0].key_id
+    assert key_vault_service.decrypt_secret(rows[0].encrypted_secret) in {
+        "concurrent-first-1234",
+        "concurrent-second-5678",
+    }
 
 
 async def test_store_key_masks_short_secret_hints(db_session, test_user):

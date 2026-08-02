@@ -2,7 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from cryptography.fernet import Fernet
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -45,32 +46,44 @@ def _key_hint(secret: str) -> str:
 async def store_verified_key(
     db: AsyncSession, user_id: str, provider: str, secret: str
 ) -> StoredKeyStatus:
+    encrypted_secret = encrypt_secret(secret)
+    values = {
+        "encrypted_secret": encrypted_secret,
+        "key_hint": _key_hint(secret),
+        "is_verified": True,
+        "verified_at": datetime.utcnow(),
+    }
+    update_result = await db.execute(
+        update(UserApiKey)
+        .where(UserApiKey.user_id == user_id, UserApiKey.provider == provider)
+        .values(**values)
+    )
+
+    if update_result.rowcount == 0:
+        row = UserApiKey(
+            user_id=user_id,
+            provider=provider,
+            **values,
+        )
+        try:
+            async with db.begin_nested():
+                db.add(row)
+                await db.flush()
+        except IntegrityError:
+            await db.execute(
+                update(UserApiKey)
+                .where(UserApiKey.user_id == user_id, UserApiKey.provider == provider)
+                .values(**values)
+            )
+
+    await db.commit()
     result = await db.execute(
         select(UserApiKey).where(
             UserApiKey.user_id == user_id,
             UserApiKey.provider == provider,
         )
     )
-    row = result.scalar_one_or_none()
-    encrypted_secret = encrypt_secret(secret)
-
-    if row is None:
-        row = UserApiKey(
-            user_id=user_id,
-            provider=provider,
-            encrypted_secret=encrypted_secret,
-            key_hint=_key_hint(secret),
-            is_verified=True,
-        )
-        db.add(row)
-    else:
-        row.encrypted_secret = encrypted_secret
-        row.key_hint = _key_hint(secret)
-        row.is_verified = True
-        row.verified_at = datetime.utcnow()
-
-    await db.commit()
-    await db.refresh(row)
+    row = result.scalar_one()
     return StoredKeyStatus(
         key_id=row.key_id,
         provider=row.provider,
