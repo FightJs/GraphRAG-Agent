@@ -59,6 +59,17 @@ async def test_store_key_upserts_the_same_owner_provider(db_session, test_user):
     assert key_vault_service.decrypt_secret(rows[0].encrypted_secret) == "replacement-5678"
 
 
+async def test_store_key_masks_short_secret_hints(db_session, test_user):
+    secret = "abc"
+
+    status = await key_vault_service.store_verified_key(
+        db_session, test_user.user_id, "mineru", secret
+    )
+
+    assert status.key_hint == "****"
+    assert status.key_hint != secret
+
+
 @pytest.mark.parametrize("encryption_key", ["", "not-a-valid-fernet-key"])
 def test_encrypt_requires_valid_deployment_key_without_exposing_secret(monkeypatch, encryption_key):
     secret = "test-secret-not-for-errors"

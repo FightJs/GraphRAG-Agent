@@ -37,6 +37,8 @@ def decrypt_secret(ciphertext: str) -> str:
 
 
 def _key_hint(secret: str) -> str:
+    if len(secret) <= 4:
+        return "****"
     return secret[-4:]
 
 
