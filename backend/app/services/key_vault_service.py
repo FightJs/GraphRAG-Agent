@@ -178,14 +178,17 @@ async def _verify_deepseek(api_key: str) -> None:
 
 
 async def _verify_mineru(api_key: str) -> None:
-    pdf = b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 0>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF"
     async with httpx.AsyncClient(timeout=20) as client:
-        response = await client.post(
-            f"{settings.MINERU_BASE_URL}/extract/task",
+        response = await client.get(
+            f"{settings.MINERU_BASE_URL}/extract/task/00000000-0000-4000-8000-000000000000",
             headers={"Authorization": f"Bearer {api_key}"},
-            files={"file": ("credential-check.pdf", pdf, "application/pdf")},
         )
-    response.raise_for_status()
+    if response.status_code == 401:
+        raise ValueError("验证失败：MinerU API Key 无效或已过期")
+    if response.status_code == 403:
+        raise ValueError("验证失败：MinerU API Key 没有访问权限")
+    if response.status_code >= 500:
+        raise ValueError("验证失败：MinerU 服务暂不可用")
 
 
 async def _verify_openrouter_embedding(api_key: str) -> None:
