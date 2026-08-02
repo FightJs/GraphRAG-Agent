@@ -75,6 +75,8 @@ npm run dev
 
 访问 Vite 输出的地址，注册账号后前往“设置 -> API Key”，依次选择 DeepSeek、MinerU、OpenRouter Embedding，粘贴密钥并点击“验证并保存”。三项均成功后系统自动开放。
 
+前后端分域部署时，在前端构建环境设置 `VITE_API_BASE_URL=https://your-api-domain/api`，并在后端设置 `CORS_ORIGINS=https://your-pages-domain`。
+
 ## 部署建议
 
 - 使用 PostgreSQL、对象存储和受控持久卷替代本地 SQLite 与本地文件路径。

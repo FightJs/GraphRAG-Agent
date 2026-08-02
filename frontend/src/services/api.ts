@@ -7,7 +7,8 @@ import type {
   ApiKeyProvider, ApiKeyStatus,
 } from '@/types'
 
-const http = axios.create({ baseURL: '/api', timeout: 30_000 })
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+const http = axios.create({ baseURL: apiBaseUrl, timeout: 30_000 })
 
 http.interceptors.request.use((cfg) => {
   const token = useAuthStore.getState().token
@@ -23,7 +24,7 @@ http.interceptors.response.use(
       orig._retry = true
       try {
         // refresh_token is in httponly cookie, sent automatically
-        const { data } = await axios.post<{ data: { access_token: string } }>('/api/v2/auth/refresh')
+        const { data } = await axios.post<{ data: { access_token: string } }>(`${apiBaseUrl}/v2/auth/refresh`)
         const token = data.data.access_token
         useAuthStore.getState().setToken(token)
         orig.headers.Authorization = `Bearer ${token}`

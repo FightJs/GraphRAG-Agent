@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from app.config import settings
 from app.database import init_db
 from app.dependencies import require_provider_readiness
 from app.routers import api_keys, health, auth, kbs, documents, index, kg, qa, webhooks
@@ -20,7 +21,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=[origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -38,5 +39,4 @@ for r in [kbs.router, documents.router, index.router, kg.router, qa.router, webh
 
 if __name__ == "__main__":
     import uvicorn
-    from app.config import settings
     uvicorn.run("app.main:app", host="0.0.0.0", port=settings.PORT, reload=True)

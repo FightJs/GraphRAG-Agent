@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     OPENROUTER_EMBEDDING_MODEL: str = "qwen/qwen3-embedding-8b"
     MOCK_EXTERNAL_SERVICES: bool = False
+    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
     PORT: int = 8000
 
