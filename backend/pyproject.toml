@@ -21,6 +21,8 @@ dependencies = [
     "openpyxl>=3.1.5",
     "python-pptx>=1.0.2",
     "beautifulsoup4>=4.12.3",
+    "cryptography>=43.0.0",
+    "greenlet>=3.0.0",
 ]
 
 [project.optional-dependencies]

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Integer, Text, Boolean, DateTime, Float, ForeignKey
+from sqlalchemy import String, Integer, Text, Boolean, DateTime, Float, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -22,6 +22,22 @@ class User(Base):
     locked_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     kbs: Mapped[list["KnowledgeBase"]] = relationship("KnowledgeBase", back_populates="owner", cascade="all, delete-orphan")
     documents: Mapped[list["Document"]] = relationship("Document", back_populates="owner", cascade="all, delete-orphan")
+    api_keys: Mapped[list["UserApiKey"]] = relationship("UserApiKey", back_populates="owner", cascade="all, delete-orphan")
+
+class UserApiKey(Base):
+    __tablename__ = "user_api_keys"
+    __table_args__ = (UniqueConstraint("user_id", "provider", name="uq_user_api_key_provider"),)
+
+    key_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.user_id"), nullable=False)
+    provider: Mapped[str] = mapped_column(String(16), nullable=False)
+    encrypted_secret: Mapped[str] = mapped_column(Text, nullable=False)
+    key_hint: Mapped[str] = mapped_column(String(8), nullable=False)
+    is_verified: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    verified_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now, nullable=False)
+    owner: Mapped["User"] = relationship("User", back_populates="api_keys")
 
 class KnowledgeBase(Base):
     __tablename__ = "knowledge_bases"

@@ -6,9 +6,11 @@ import os
 import asyncio
 import pytest
 from httpx import AsyncClient, ASGITransport
+from cryptography.fernet import Fernet
 
 # ── 在导入 app 之前覆盖数据库 URL 为临时文件 ────────────────────────────
 _TEST_DB = "./test_temp_graphrag.db"
+os.environ["API_KEY_ENCRYPTION_KEY"] = Fernet.generate_key().decode()
 import app.config as _cfg
 _cfg.settings.DATABASE_URL = f"sqlite+aiosqlite:///{_TEST_DB}"
 # 测试环境始终使用 mock 管线，不消耗真实 LLM 额度，也不依赖真实文件解析
