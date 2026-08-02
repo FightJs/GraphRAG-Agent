@@ -1,0 +1,29 @@
+# env
+.env
+.env.local
+.env.*.local
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+*.db
+storage/
+
+# node
+node_modules/
+dist/
+
+# os
+.DS_Store
+
+# generated project data
+output/
+uploads/
+results/
+*.pdf
+
+# local agent instructions and embedded third-party checkout
+CLAUDE.md
+.claude/
+langextract/

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>GraphRAG Agent — 产品原型 v2.0</title>
+<style>
+:root{
+  --primary:#2563EB;--primary-hover:#1D4ED8;--primary-light:#EFF6FF;
+  --success:#16A34A;--warning:#D97706;--danger:#DC2626;
+  --surface:#FFFFFF;--bg:#F8FAFC;--border:#E2E8F0;
+  --text:#0F172A;--text-sec:#64748B;
+  --edit-bg:#FEF3C7;--edit-text:#92400E;
+  --kg-人物:#3B82F6;--kg-技能:#22C55E;--kg-项目:#A855F7;
+  --kg-公司:#F97316;--kg-学校:#06B6D4;--kg-职位:#EC4899;
+}
+*{box-sizing:border-box;margin:0;padding:0;font-family:'PingFang SC','Microsoft YaHei',sans-serif;}
+body{background:var(--bg);color:var(--text);font-size:14px;}
+
+/* ───── 屏幕导航条 ───── */
+.screen-nav{position:fixed;top:0;left:0;right:0;z-index:100;background:#1E293B;display:flex;align-items:center;gap:2px;padding:6px 12px;overflow-x:auto;}
+.screen-nav span{color:#94A3B8;font-size:12px;white-space:nowrap;margin-right:6px;}
+.snav-btn{padding:4px 10px;border-radius:4px;border:none;cursor:pointer;font-size:12px;white-space:nowrap;
+  background:#334155;color:#CBD5E1;transition:background .15s;}
+.snav-btn:hover{background:#475569;}
+.snav-btn.active{background:var(--primary);color:#fff;}
+
+/* ───── 屏幕容器 ───── */
+.screen{display:none;min-height:100vh;padding-top:40px;}
+.screen.active{display:flex;flex-direction:column;}
+
+/* ───── TopNav ───── */
+.topnav{height:56px;background:var(--surface);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 24px;gap:16px;position:sticky;top:40px;z-index:50;}
+.topnav .logo{font-size:16px;font-weight:700;color:var(--primary);display:flex;align-items:center;gap:6px;}
+.topnav .logo-icon{width:28px;height:28px;background:var(--primary);border-radius:6px;
+  display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:700;}
+.topnav .breadcrumb{display:flex;align-items:center;gap:6px;color:var(--text-sec);font-size:13px;}
+.topnav .breadcrumb .sep{color:var(--border);}
+.topnav .breadcrumb .current{color:var(--text);font-weight:500;}
+.topnav .spacer{flex:1;}
+.topnav .avatar{width:32px;height:32px;border-radius:50%;background:var(--primary);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;cursor:pointer;}
+
+/* ───── 通用布局 ───── */
+.page-body{flex:1;padding:24px;max-width:1280px;margin:0 auto;width:100%;}
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;}
+.page-title{font-size:20px;font-weight:700;}
+.page-sub{font-size:13px;color:var(--text-sec);margin-top:4px;}
+
+/* ───── 按钮 ───── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:6px;
+  border:none;cursor:pointer;font-size:13px;font-weight:500;transition:background .15s;}
+.btn-primary{background:var(--primary);color:#fff;}
+.btn-primary:hover{background:var(--primary-hover);}
+.btn-ghost{background:transparent;color:var(--text);border:1px solid var(--border);}
+.btn-ghost:hover{background:var(--bg);}
+.btn-danger{background:var(--danger);color:#fff;}
+.btn-sm{padding:5px 10px;font-size:12px;}
+.btn-icon{width:32px;height:32px;padding:0;justify-content:center;border-radius:6px;}
+
+/* ───── 状态徽章 ───── */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:500;}
+.badge-uploaded{background:#F1F5F9;color:var(--text-sec);}
+.badge-indexing{background:#FEF3C7;color:var(--warning);}
+.badge-indexed{background:#DCFCE7;color:var(--success);}
+.badge-failed{background:#FEE2E2;color:var(--danger);}
+.dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+
+/* ───── 卡片 ───── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;}
+.card-grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));}
+
+/* ───── 知识库卡片颜色 ───── */
+.kb-icon{width:48px;height:48px;border-radius:10px;display:flex;align-items:center;
+  justify-content:center;font-size:22px;margin-bottom:12px;}
+.kb-blue{background:#DBEAFE;} .kb-purple{background:#EDE9FE;}
+.kb-green{background:#DCFCE7;} .kb-orange{background:#FFEDD5;}
+
+/* ───── 表格 ───── */
+.table{width:100%;border-collapse:collapse;}
+.table th{padding:10px 12px;text-align:left;font-weight:500;font-size:12px;
+  color:var(--text-sec);border-bottom:1px solid var(--border);background:#F8FAFC;}
+.table td{padding:12px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle;}
+.table tr:hover td{background:#F8FAFC;}
+.table .doc-name{font-weight:500;color:var(--text);}
+.table .doc-meta{font-size:12px;color:var(--text-sec);margin-top:2px;}
+
+/* ───── 进度条 ───── */
+.prog-bar-wrap{background:var(--border);border-radius:999px;height:8px;overflow:hidden;}
+.prog-bar{height:100%;border-radius:999px;background:var(--primary);transition:width .4s;}
+
+/* ───── 输入框 ───── */
+input,textarea{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:6px;
+  font-size:14px;color:var(--text);outline:none;font-family:inherit;}
+input:focus,textarea:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-light);}
+label{display:block;font-size:13px;font-weight:500;margin-bottom:6px;color:var(--text);}
+.form-group{margin-bottom:16px;}
+
+/* ───── KG 画布 ───── */
+.kg-canvas{background:#F1F5F9;border-radius:10px;position:relative;overflow:hidden;}
+.kg-node{position:absolute;border-radius:999px;color:#fff;font-size:11px;font-weight:600;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  box-shadow:0 2px 8px rgba(0,0,0,.15);transition:transform .15s,box-shadow .15s;}
+.kg-node:hover{transform:scale(1.1);box-shadow:0 4px 12px rgba(0,0,0,.25);}
+.kg-node.selected{outline:3px solid var(--warning);}
+
+/* ───── 聊天界面 ───── */
+.chat-wrap{display:flex;gap:0;height:calc(100vh - 136px);}
+.chat-sidebar{width:260px;border-right:1px solid var(--border);background:var(--surface);
+  overflow-y:auto;flex-shrink:0;}
+.chat-main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.chat-messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px;}
+.chat-input-area{padding:16px 20px;border-top:1px solid var(--border);background:var(--surface);}
+.msg-user{align-self:flex-end;background:var(--primary);color:#fff;padding:10px 14px;
+  border-radius:12px 12px 4px 12px;max-width:70%;font-size:14px;line-height:1.6;}
+.msg-ai{align-self:flex-start;background:var(--surface);border:1px solid var(--border);
+  padding:12px 16px;border-radius:4px 12px 12px 12px;max-width:80%;font-size:14px;line-height:1.7;}
+.msg-ai .meta-row{margin-top:8px;padding-top:8px;border-top:1px solid var(--border);
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.msg-ai .meta-item{font-size:11px;color:var(--text-sec);}
+.feedback-btns{display:flex;gap:6px;}
+.fb-btn{padding:3px 10px;border-radius:4px;border:1px solid var(--border);
+  background:transparent;cursor:pointer;font-size:12px;}
+.fb-btn.pos:hover{background:#DCFCE7;border-color:var(--success);color:var(--success);}
+.fb-btn.neg:hover{background:#FEE2E2;border-color:var(--danger);color:var(--danger);}
+
+/* ───── 流式光标 ───── */
+.cursor{display:inline-block;width:2px;height:1em;background:var(--primary);margin-left:1px;
+  animation:blink 1s step-end infinite;vertical-align:text-bottom;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+/* ───── 编辑模式 Banner ───── */
+.edit-banner{background:var(--edit-bg);color:var(--edit-text);padding:8px 20px;
+  font-size:13px;font-weight:500;display:flex;align-items:center;gap:8px;
+  border-bottom:1px solid #FDE68A;}
+
+/* ───── 来源面板 ───── */
+.source-panel{background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;
+  margin-top:10px;overflow:hidden;}
+.source-toggle{padding:8px 12px;font-size:12px;color:var(--text-sec);
+  cursor:pointer;display:flex;align-items:center;gap:6px;user-select:none;}
+.source-item{padding:8px 12px;border-top:1px solid #FDE68A;font-size:12px;}
+.source-item .src-title{font-weight:500;color:var(--text);margin-bottom:3px;}
+.source-item .src-snip{color:var(--text-sec);line-height:1.5;}
+
+/* ───── 登录页 ───── */
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);}
+.login-card{background:var(--surface);border-radius:12px;padding:40px;width:400px;
+  box-shadow:0 4px 24px rgba(0,0,0,.08);}
+.login-logo{text-align:center;margin-bottom:28px;}
+.login-logo .lg-icon{width:52px;height:52px;background:var(--primary);border-radius:12px;
+  display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:24px;font-weight:700;}
+.login-logo h2{margin-top:12px;font-size:20px;font-weight:700;}
+.login-logo p{color:var(--text-sec);font-size:13px;margin-top:4px;}
+.tabs-line{display:flex;border-bottom:1px solid var(--border);margin-bottom:24px;}
+.tab-btn{flex:1;padding:10px;text-align:center;font-size:14px;font-weight:500;
+  cursor:pointer;color:var(--text-sec);border-bottom:2px solid transparent;transition:all .15s;}
+.tab-btn.active{color:var(--primary);border-bottom-color:var(--primary);}
+</style>
+</head>
+<body>
+
+<!-- ══════════ 屏幕导航条 ══════════ -->
+<nav class="screen-nav">
+  <span>原型页面：</span>
+  <button class="snav-btn active" onclick="showScreen('s00')">P-00 登录/注册</button>
+  <button class="snav-btn" onclick="showScreen('s01')">P-01 知识库列表</button>
+  <button class="snav-btn" onclick="showScreen('s02')">P-02 文档库</button>
+  <button class="snav-btn" onclick="showScreen('s03')">P-03 索引进度</button>
+  <button class="snav-btn" onclick="showScreen('s05')">P-05 KG 可视化</button>
+  <button class="snav-btn" onclick="showScreen('s06')">P-06 KG 编辑器</button>
+  <button class="snav-btn" onclick="showScreen('s07')">P-07 单文档问答</button>
+  <button class="snav-btn" onclick="showScreen('s08')">P-08 多文档问答</button>
+</nav>
+
+<!-- ══════════ P-00：登录 / 注册 ══════════ -->
+<div id="s00" class="screen active">
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="login-logo">
+        <div class="lg-icon">G</div>
+        <h2>GraphRAG Agent</h2>
+        <p>多模态知识图谱问答平台</p>
+      </div>
+      <div class="tabs-line">
+        <div class="tab-btn active" onclick="toggleLoginTab(this,'login-form')">登录</div>
+        <div class="tab-btn" onclick="toggleLoginTab(this,'reg-form')">注册</div>
+      </div>
+      <!-- 登录表单 -->
+      <div id="login-form">
+        <div class="form-group"><label>邮箱</label><input type="email" placeholder="your@email.com"></div>
+        <div class="form-group"><label>密码</label><input type="password" placeholder="请输入密码"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+          <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;margin:0;">
+            <input type="checkbox" style="width:auto;"> 记住我
+          </label>
+          <span style="color:var(--primary);font-size:13px;cursor:pointer;">忘记密码？</span>
+        </div>
+        <button class="btn btn-primary" style="width:100%;justify-content:center;padding:10px;">登录</button>
+      </div>
+      <!-- 注册表单 -->
+      <div id="reg-form" style="display:none;">
+        <div class="form-group"><label>用户名</label><input placeholder="3-32位字母数字下划线"></div>
+        <div class="form-group"><label>邮箱</label><input type="email" placeholder="your@email.com"></div>
+        <div class="form-group"><label>密码</label><input type="password" placeholder="8位以上，含大小写字母和数字"></div>
+        <div class="form-group"><label>确认密码</label><input type="password" placeholder="再次输入密码"></div>
+        <button class="btn btn-primary" style="width:100%;justify-content:center;padding:10px;">创建账户</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+

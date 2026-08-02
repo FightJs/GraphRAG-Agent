@@ -1,0 +1,42 @@
+[project]
+name = "graphrag-agent-backend"
+version = "2.0.0"
+description = "GraphRAG Agent 多模态知识图谱问答系统后端服务"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.30.0",
+    "sqlalchemy>=2.0.31",
+    "pydantic[email]>=2.7.4",
+    "pydantic-settings>=2.3.4",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "python-multipart>=0.0.9",
+    "aiofiles>=24.1.0",
+    "httpx>=0.27.0",
+    "python-dotenv>=1.0.1",
+    "aiosqlite>=0.20.0",
+    "pypdf>=4.3.1",
+    "python-docx>=1.1.2",
+    "openpyxl>=3.1.5",
+    "python-pptx>=1.0.2",
+    "beautifulsoup4>=4.12.3",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.2.0",
+    "pytest-asyncio>=0.23.7",
+    "httpx>=0.27.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
