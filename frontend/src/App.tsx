@@ -4,6 +4,7 @@ import AppLayout from '@/components/layout/AppLayout'
 import LoginPage from '@/pages/auth/LoginPage'
 import KBListPage from '@/pages/kb/KBListPage'
 import DocLibPage from '@/pages/doc/DocLibPage'
+import DocDetailPage from '@/pages/doc/DocDetailPage'
 import IndexingPage from '@/pages/doc/IndexingPage'
 import KGEntryPage from '@/pages/kg/KGEntryPage'
 import KGPage from '@/pages/kg/KGPage'
@@ -45,6 +46,7 @@ export default function App() {
         >
           <Route index element={<RequireReady><KBListPage /></RequireReady>} />
           <Route path="kb/:kbId" element={<RequireReady><DocLibPage /></RequireReady>} />
+          <Route path="kb/:kbId/doc/:docId" element={<RequireReady><DocDetailPage /></RequireReady>} />
           <Route path="kb/:kbId/kg" element={<RequireReady><KGEntryPage /></RequireReady>} />
           <Route path="kb/:kbId/doc/:docId/index/:taskId" element={<RequireReady><IndexingPage /></RequireReady>} />
           <Route path="kb/:kbId/doc/:docId/kg" element={<RequireReady><KGPage /></RequireReady>} />

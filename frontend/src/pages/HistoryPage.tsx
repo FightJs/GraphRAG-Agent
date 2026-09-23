@@ -15,7 +15,7 @@ function HistoryItem({ item }: { item: QAHistory }) {
           <div className="flex items-center gap-3 text-xs text-ts">
             <span>{item.created_at?.slice(0, 16).replace('T', ' ')}</span>
             <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
-              {item.retrieval_mode === 'kg_only' ? 'KG-Only' : '混合检索'}
+              {item.retrieval_mode === 'kg_only' ? 'KG-Only' : item.retrieval_mode === 'agentic' ? 'RRF Agentic' : 'Auto'}
             </span>
             <span className="flex items-center gap-0.5"><Zap size={10} />{(item.input_tokens ?? 0) + (item.output_tokens ?? 0)} tokens</span>
           </div>

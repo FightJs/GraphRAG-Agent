@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 320" font-family="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <text x="40" y="28" font-size="14" font-weight="500" fill="#1a1a1a">单文档问答 · 三种检索模式</text>
+  <text x="40" y="52" font-size="11" fill="#666">材料来源与召回策略对比</text>
+
+  <!-- column headers -->
+  <text x="200" y="78" font-size="11" fill="#666" text-anchor="middle">KG 子图</text>
+  <text x="340" y="78" font-size="11" fill="#666" text-anchor="middle">向量召回</text>
+  <text x="480" y="78" font-size="11" fill="#666" text-anchor="middle">关键词召回</text>
+  <text x="600" y="78" font-size="11" fill="#666" text-anchor="middle">子查询分解</text>
+
+  <!-- row 1 KG-Only -->
+  <rect x="40" y="92" width="600" height="48" rx="8" fill="#f5f5f5" stroke="#ddd" stroke-width="0.5"/>
+  <text x="56" y="112" font-size="13" font-weight="500" fill="#1a1a1a">KG-Only</text>
+  <text x="56" y="128" font-size="11" fill="#666">仅图检索查关系</text>
+  <circle cx="200" cy="116" r="6" fill="#2d6a4f"/>
+  <circle cx="340" cy="116" r="6" fill="#ddd" stroke="#ccc" stroke-width="0.5"/>
+  <circle cx="480" cy="116" r="6" fill="#ddd" stroke="#ccc" stroke-width="0.5"/>
+  <circle cx="600" cy="116" r="6" fill="#ddd" stroke="#ccc" stroke-width="0.5"/>
+
+  <!-- row 2 RRF Agentic -->
+  <rect x="40" y="152" width="600" height="48" rx="8" fill="#f5f5f5" stroke="#ddd" stroke-width="0.5"/>
+  <text x="56" y="172" font-size="13" font-weight="500" fill="#1a1a1a">RRF Agentic</text>
+  <text x="56" y="188" font-size="11" fill="#666">子查分解 · 三路召回</text>
+  <circle cx="200" cy="176" r="6" fill="#2d6a4f"/>
+  <circle cx="340" cy="176" r="6" fill="#1d3557"/>
+  <circle cx="480" cy="176" r="6" fill="#1d3557"/>
+  <circle cx="600" cy="176" r="6" fill="#e07a2d"/>
+
+  <!-- row 3 Auto -->
+  <rect x="40" y="212" width="600" height="48" rx="8" fill="#f5f5f5" stroke="#ddd" stroke-width="0.5"/>
+  <text x="56" y="232" font-size="13" font-weight="500" fill="#1a1a1a">Auto</text>
+  <text x="56" y="248" font-size="11" fill="#666">节点 &gt;200 时切换</text>
+  <circle cx="200" cy="236" r="6" fill="#2d6a4f"/>
+  <circle cx="340" cy="236" r="6" fill="#bbb" stroke="#aaa" stroke-width="0.5"/>
+  <circle cx="480" cy="236" r="6" fill="#bbb" stroke="#aaa" stroke-width="0.5"/>
+  <circle cx="600" cy="236" r="6" fill="#bbb" stroke="#aaa" stroke-width="0.5"/>
+  <text x="270" y="240" font-size="10" fill="#888">≤200 → KG-Only</text>
+  <text x="360" y="240" font-size="10" fill="#888">→ &gt;200 走 RRF Agentic</text>
+
+  <!-- legend -->
+  <circle cx="40" cy="300" r="4" fill="#2d6a4f"/>
+  <text x="52" y="304" font-size="10" fill="#666">固定使用</text>
+  <circle cx="120" cy="300" r="4" fill="#1d3557"/>
+  <text x="132" y="304" font-size="10" fill="#666">三路之一</text>
+  <circle cx="200" cy="300" r="4" fill="#e07a2d"/>
+  <text x="212" y="304" font-size="10" fill="#666">核心特征</text>
+  <circle cx="280" cy="300" r="4" fill="#bbb"/>
+  <text x="292" y="304" font-size="10" fill="#666">条件启用</text>
+</svg>

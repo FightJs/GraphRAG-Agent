@@ -1,6 +1,7 @@
 // ───────────────────────── 通用 ─────────────────────────
-export type DocStatus = 'uploaded' | 'indexing' | 'indexed' | 'failed'
-export type RetrievalMode = 'kg_only' | 'hybrid'
+export type DocStatus = 'uploaded' | 'indexing' | 'indexed' | 'failed' | 'cancelled'
+export type IndexTaskStatus = DocStatus | 'pending' | 'cancelling'
+export type RetrievalMode = 'kg_only' | 'agentic' | 'auto'
 
 // ───────────────────────── 用户 / Auth ─────────────────────────
 export interface User {
@@ -71,7 +72,7 @@ export interface Document {
 export interface IndexTask {
   task_id: string
   doc_id: string
-  status: DocStatus
+  status: IndexTaskStatus
   progress: number
   current_stage: number
   stages: IndexStage[]
@@ -156,6 +157,33 @@ export interface WebhookCreatePayload {
   secret?: string
 }
 
+// ───────────────────────── 通知 ─────────────────────────
+export type NotificationType = 'index.completed' | 'index.failed' | 'qa.weekly_digest'
+
+export interface NotificationPreferences {
+  index_completed: boolean
+  index_failed: boolean
+  qa_weekly_digest: boolean
+}
+
+export type NotificationPreferencesPatch = Partial<NotificationPreferences>
+
+export interface NotificationItem {
+  notification_id: string
+  type: NotificationType | string
+  title: string
+  body: string
+  related_id?: string | null
+  is_read: boolean
+  created_at: string
+}
+
+export interface NotificationListResponse {
+  items: NotificationItem[]
+  total: number
+  unread: number
+}
+
 // ───────────────────────── 问答历史 ─────────────────────────
 export interface QAHistory {
   query_id: string
@@ -167,4 +195,29 @@ export interface QAHistory {
   input_tokens: number
   output_tokens: number
   created_at: string
+}
+
+// ───────────────────────── 系统状态 ─────────────────────────
+export interface SystemStatus {
+  status: string
+  version: string
+  timestamp: string
+  mock_external_services: boolean
+  database: { ok: boolean }
+  vector_store: { ok: boolean; uri: string }
+  storage: {
+    upload_dir: string
+    kg_dir: string
+    chunks_dir: string
+    milvus_uri: string
+  }
+  stats: {
+    docs_total: number
+    docs_indexed: number
+    docs_indexing: number
+    docs_failed: number
+    users: number
+    qa_records: number
+  }
+  providers: Record<string, string>
 }

@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { Send, Square, ThumbsUp, ThumbsDown, ChevronDown, ChevronUp, Files, Zap, Search } from 'lucide-react'
+import { Send, Square, ThumbsUp, ThumbsDown, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Files, Zap, Search } from 'lucide-react'
 import { docApi, qaApi } from '@/services/api'
 import { useSSE } from '@/hooks/useSSE'
 import { useToast } from '@/hooks/useToast'
 import type { Document, QAMessage, QASource, RetrievalMode } from '@/types'
+import MarkdownText from '@/components/ui/MarkdownText'
 import { clsx } from 'clsx'
 
 function SourceItem({ src, idx }: { src: QASource; idx: number }) {
@@ -45,8 +46,7 @@ function AIMsgBubble({ msg, onFeedback }: { msg: QAMessage & { streaming?: boole
           <div className="p-4 space-y-2">{[...Array(3)].map((_, i) => <div key={i} className="h-4 rounded skeleton" style={{ width: `${80 - i * 15}%` }} />)}</div>
         ) : (
           <>
-            <div className={clsx('px-4 py-3 text-sm text-tp leading-relaxed whitespace-pre-wrap', msg.streaming && 'streaming-cursor')}
-              dangerouslySetInnerHTML={{ __html: msg.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>') }} />
+            <MarkdownText content={msg.content} className={clsx('px-4 py-3 text-sm text-tp leading-relaxed whitespace-pre-wrap', msg.streaming && 'streaming-cursor')} />
             {msg.sources && msg.sources.length > 0 && (
               <div className="border-t border-[#FEF9C3] bg-[#FEF9C3]/50">
                 <button onClick={() => setSrcOpen(!srcOpen)} className="w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-semibold text-warning">
@@ -92,7 +92,35 @@ export default function KBQAPage() {
   const [messages, setMessages] = useState<(QAMessage & { streaming?: boolean })[]>([])
   const [input, setInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
-  const [mode, setMode] = useState<RetrievalMode>('hybrid')
+  const [mode, setMode] = useState<RetrievalMode>('auto')
+  const [leftW, setLeftW] = useState(240)
+  const [rightW, setRightW] = useState(220)
+  const [leftOpen, setLeftOpen] = useState(true)
+  const [rightOpen, setRightOpen] = useState(true)
+
+  const startResize = (side: 'left' | 'right') => (e: React.MouseEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = side === 'left' ? leftW : rightW
+    const onMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - startX
+      if (side === 'left') {
+        setLeftW(Math.min(400, Math.max(160, startW + dx)))
+      } else {
+        setRightW(Math.min(400, Math.max(160, startW - dx)))
+      }
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set())
   const [docSearch, setDocSearch] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -134,11 +162,14 @@ export default function KBQAPage() {
 
     const stop = connect(
       '/api/v2/qa/kb-query',
-      { kb_id: kbId, doc_ids: Array.from(selectedDocs), question: q, retrieval_mode: mode, stream: true },
+      { kb_id: kbId, doc_ids: Array.from(selectedDocs), question: q, stream: true, options: { retrieval_mode: mode } },
       {
         onDelta: (chunk) => setMessages(prev => { const a = [...prev]; a[a.length-1] = { ...a[a.length-1], content: a[a.length-1].content + chunk }; return a }),
         onDone: (meta) => {
-          setMessages(prev => { const a = [...prev]; a[a.length-1] = { ...a[a.length-1], streaming: false, query_id: meta.query_id, tokens: meta.tokens, sources: meta.sources as QASource[] | undefined }; return a })
+          const modeUsed = (meta as { retrieval_mode_used?: string }).retrieval_mode_used
+          const showSources = modeUsed !== 'kg_only' && mode !== 'kg_only'
+          const rawSources = meta.sources as QASource[] | undefined
+          setMessages(prev => { const a = [...prev]; a[a.length-1] = { ...a[a.length-1], streaming: false, query_id: meta.query_id, tokens: meta.tokens, sources: showSources ? rawSources : undefined }; return a })
           setIsStreaming(false)
         },
         onError: (msg) => {
@@ -156,16 +187,22 @@ export default function KBQAPage() {
   return (
     <div className="h-full flex overflow-hidden">
       {/* Left doc select panel */}
-      <div className="w-[260px] border-r border-border bg-surface flex-shrink-0 flex flex-col">
+      {leftOpen ? (
+      <div style={{ width: leftW }} className="border-r border-border bg-surface flex-shrink-0 flex flex-col relative">
         <div className="border-b border-border">
-          <div className="flex items-center justify-between px-4 py-3">
-            <div>
-              <p className="text-sm font-semibold text-tp">选择参与问答的文档</p>
+          <div className="flex items-center justify-between px-3 py-3 gap-2">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-tp truncate">选择文档</p>
               <p className="text-xs text-primary mt-0.5">已选 {selectedDocs.size} / {Math.min(indexedDocs.length, 10)} 份</p>
             </div>
-            <button onClick={toggleAll} className="text-xs text-primary bg-primary/10 px-2.5 py-1 rounded-md font-semibold hover:bg-primary/20">
-              {selectedDocs.size === indexedDocs.length ? '取消' : '全选'}
-            </button>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <button onClick={toggleAll} className="text-xs text-primary bg-primary/10 px-2 py-1 rounded-md font-semibold hover:bg-primary/20">
+                {selectedDocs.size === indexedDocs.length ? '取消' : '全选'}
+              </button>
+              <button onClick={() => setLeftOpen(false)} title="收起文档列表" className="p-1 rounded text-ts hover:text-tp hover:bg-bg">
+                <ChevronLeft size={14} />
+              </button>
+            </div>
           </div>
           <div className="flex items-center gap-2 px-4 py-2 border-t border-border">
             <Search size={13} className="text-ts" />
@@ -191,7 +228,23 @@ export default function KBQAPage() {
             <p className="text-xs text-ts text-center py-6">暂无已索引文档</p>
           )}
         </div>
+        {/* right-edge drag handle */}
+        <div
+          onMouseDown={startResize('left')}
+          title="拖拽调整宽度"
+          className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/30 transition-colors"
+        />
       </div>
+      ) : (
+        <button
+          onClick={() => setLeftOpen(true)}
+          title="展开文档列表"
+          className="w-10 border-r border-border bg-surface flex-shrink-0 flex flex-col items-center py-3 gap-2 text-ts hover:text-tp hover:bg-bg"
+        >
+          <ChevronRight size={14} />
+          <span className="text-[10px] writing-mode-vertical" style={{ writingMode: 'vertical-rl' }}>文档 {selectedDocs.size}</span>
+        </button>
+      )}
 
       {/* Main chat area */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -207,10 +260,10 @@ export default function KBQAPage() {
             )}
           </div>
           <div className="flex items-center gap-1 p-1 bg-bg border border-border rounded-lg">
-            {(['kg_only', 'hybrid'] as const).map((m) => (
+            {(['kg_only', 'agentic', 'auto'] as const).map((m) => (
               <button key={m} onClick={() => setMode(m)}
                 className={clsx('h-7 px-3 rounded-md text-xs font-medium transition-colors', mode === m ? 'bg-primary text-white' : 'text-ts hover:text-tp')}>
-                {m === 'kg_only' ? 'KG-Only' : '混合检索模式'}
+                {m === 'kg_only' ? 'KG-Only' : m === 'agentic' ? 'RRF Agentic' : 'Auto'}
               </button>
             ))}
           </div>
@@ -267,15 +320,21 @@ export default function KBQAPage() {
       </div>
 
       {/* Right meta panel */}
-      <div className="w-[260px] border-l border-border bg-surface flex-shrink-0 flex flex-col">
-        <div className="px-4 py-3 border-b border-border">
+      {rightOpen ? (
+      <div style={{ width: rightW }} className="border-l border-border bg-surface flex-shrink-0 flex flex-col relative">
+        <div onMouseDown={startResize('right')} title="拖拽调整宽度"
+          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/30 transition-colors z-10" />
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
           <p className="text-sm font-semibold text-tp">问答统计</p>
+          <button onClick={() => setRightOpen(false)} title="收起统计" className="p-1 rounded text-ts hover:text-tp hover:bg-bg">
+            <ChevronRight size={14} />
+          </button>
         </div>
         <div className="p-4 space-y-5">
           <div>
             <p className="text-[11px] font-semibold text-ts mb-2">检索模式</p>
             <span className="text-xs bg-primary/10 text-primary px-2.5 py-1 rounded-full font-semibold">
-              {mode === 'kg_only' ? 'KG-Only' : '混合检索'}
+              {mode === 'kg_only' ? 'KG-Only' : mode === 'agentic' ? 'RRF Agentic' : 'Auto'}
             </span>
           </div>
           <div>
@@ -313,6 +372,16 @@ export default function KBQAPage() {
           </div>
         </div>
       </div>
+      ) : (
+        <button
+          onClick={() => setRightOpen(true)}
+          title="展开问答统计"
+          className="w-10 border-l border-border bg-surface flex-shrink-0 flex flex-col items-center py-3 gap-2 text-ts hover:text-tp hover:bg-bg"
+        >
+          <ChevronLeft size={14} />
+          <span className="text-[10px]" style={{ writingMode: 'vertical-rl' }}>问答统计</span>
+        </button>
+      )}
     </div>
   )
 }

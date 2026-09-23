@@ -40,6 +40,15 @@ async def get_task(task_id: str, user: User = Depends(get_current_user), db: Asy
         raise HTTPException(404, {"code": 4042, "msg": str(e).split(":", 1)[-1]})
     return Resp.ok(_task_dict(task))
 
+@router.post("/api/v1/index/tasks/{task_id}/cancel")
+async def cancel_index_task(task_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    try:
+        result = await index_service.cancel_task(db, task_id, user.user_id)
+    except ValueError as e:
+        code, msg = str(e).split(":", 1)
+        raise HTTPException(400 if code != "4041" else 404, {"code": int(code), "msg": msg})
+    return Resp.ok(result)
+
 def _task_dict(task) -> dict:
     return {
         "task_id": task.task_id, "doc_id": task.doc_id, "status": task.status,

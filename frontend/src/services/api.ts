@@ -5,6 +5,8 @@ import type {
   Document, IndexTask, KGGraph, KGOperation, QAHistory, FeedbackPayload,
   Webhook, WebhookCreatePayload,
   ApiKeyProvider, ApiKeyStatus,
+  NotificationPreferences, NotificationPreferencesPatch, NotificationListResponse, NotificationItem,
+  SystemStatus,
 } from '@/types'
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
@@ -53,6 +55,12 @@ export const authApi = {
 
   // best-effort: invalidates refresh token on server (clears httpOnly cookie)
   logout: () => http.post('/v2/auth/logout').catch(() => {}),
+
+  updateMe: (p: { username?: string; email?: string }) =>
+    http.patch<{ data: User }>('/v2/auth/me', p).then(d<User>),
+
+  changePassword: (current_password: string, new_password: string) =>
+    http.post('/v2/auth/change-password', { current_password, new_password }),
 }
 
 // ── Knowledge Base ────────────────────────────────────────────
@@ -86,7 +94,7 @@ export const docApi = {
 
   batchUpload: (kbId: string, files: File[], onProgress?: (pct: number) => void) => {
     const fd = new FormData()
-    files.forEach(f => fd.append('files[]', f))
+    files.forEach(f => fd.append('files', f))
     fd.append('kb_id', kbId)
     return http.post<{ data: { uploaded: { doc_id: string; filename: string; status: string }[]; failed: { filename: string; error: string }[] } }>(
       '/v2/documents/batch-upload', fd, {
@@ -103,6 +111,15 @@ export const docApi = {
 
   getTask: (taskId: string) =>
     http.get<{ data: IndexTask }>(`/v1/index/tasks/${taskId}`).then(d<IndexTask>),
+
+  batchIndex: (docIds: string[]) =>
+    http.post<{ data: { tasks: { task_id: string; doc_id: string; status: string }[]; skipped: string[] } }>(
+      '/v2/index/batch', { doc_ids: docIds }
+    ).then(d<{ tasks: { task_id: string; doc_id: string; status: string }[]; skipped: string[] }>),
+
+  cancel: (taskId: string) =>
+    http.post<{ data: { task_id: string; status: string } }>(`/v1/index/tasks/${taskId}/cancel`)
+      .then(d<{ task_id: string; status: string }>),
 }
 
 // ── Knowledge Graph ───────────────────────────────────────────
@@ -144,6 +161,32 @@ export const apiKeyApi = {
   save: (provider: ApiKeyProvider, api_key: string) =>
     http.put(`/v2/settings/api-keys/${provider}`, { api_key }).then(r => r.data),
   remove: (provider: ApiKeyProvider) => http.delete(`/v2/settings/api-keys/${provider}`),
+}
+
+export const notifyApi = {
+  getPreferences: () =>
+    http.get<{ data: NotificationPreferences }>('/v2/settings/notifications/preferences')
+      .then(d<NotificationPreferences>),
+  updatePreferences: (patch: NotificationPreferencesPatch) =>
+    http.put<{ data: NotificationPreferences }>('/v2/settings/notifications/preferences', patch)
+      .then(d<NotificationPreferences>),
+  list: (limit = 20) =>
+    http.get<{ data: NotificationListResponse }>('/v2/notifications', { params: { limit } })
+      .then(d<NotificationListResponse>),
+  unreadCount: () =>
+    http.get<{ data: { unread: number } }>('/v2/notifications/unread-count')
+      .then(d<{ unread: number }>),
+  markRead: (id: string) =>
+    http.post<{ data: NotificationItem }>(`/v2/notifications/${id}/read`).then(d<NotificationItem>),
+  markAllRead: () => http.post('/v2/notifications/read-all').then(r => r.data),
+  remove: (id: string) => http.delete(`/v2/notifications/${id}`),
+  clearAll: () => http.delete('/v2/notifications').then(r => r.data),
+}
+
+// ── System ─────────────────────────────────────────────────────
+export const systemApi = {
+  status: () =>
+    http.get<{ data: SystemStatus }>('/v2/system/status').then(d<SystemStatus>),
 }
 
 export default http

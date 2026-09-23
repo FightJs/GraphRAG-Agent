@@ -11,6 +11,21 @@ class WebhookUpdate(BaseModel):
     url: Optional[str] = None
     events: Optional[list[str]] = None
     is_active: Optional[bool] = None
+    secret: Optional[str] = None
+    secret: Optional[str] = None
+    secret: Optional[str] = None
+    secret: Optional[str] = None
+    secret: Optional[str] = None
+    secret: Optional[str] = None
+    secret: Optional[str] = None
+    secret: Optional[str] = None
+    secret: Optional[str] = None
+    secret: Optional[str] = None
+    secret: Optional[str] = None
+    secret: Optional[str] = None
+    secret: Optional[str] = None
+    secret: Optional[str] = None
+    secret: Optional[str] = None
 
 class WebhookOut(BaseModel):
     webhook_id: str

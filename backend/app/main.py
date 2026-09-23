@@ -6,6 +6,7 @@ from app.config import settings
 from app.database import init_db
 from app.dependencies import require_provider_readiness
 from app.routers import api_keys, health, auth, kbs, documents, index, kg, qa, webhooks
+from app.routers.notifications import notif_router, prefs_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -31,7 +32,7 @@ app.add_middleware(
 async def global_handler(request: Request, exc: Exception):
     return JSONResponse(status_code=500, content={"code": 5000, "msg": str(exc)})
 
-for r in [health.router, auth.router, api_keys.router]:
+for r in [health.router, health.sys_router, auth.router, api_keys.router, prefs_router, notif_router]:
     app.include_router(r)
 
 for r in [kbs.router, documents.router, index.router, kg.router, qa.router, webhooks.router]:

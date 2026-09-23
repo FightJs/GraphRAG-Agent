@@ -40,6 +40,38 @@ async def delete_webhook(webhook_id: str, user: User = Depends(get_current_user)
         raise HTTPException(404, {"code": 4044, "msg": str(e).split(":", 1)[-1]})
     return Resp.ok(msg="Webhook已删除")
 
+@router.patch("/{webhook_id}")
+async def update_webhook(webhook_id: str, body: WebhookUpdate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    valid_events = {"index.completed", "index.failed"}
+    if body.events is not None:
+        for e in body.events:
+            if e not in valid_events:
+                raise HTTPException(400, {"code": 4001, "msg": f"不支持的事件类型: {e}"})
+    try:
+        wh = await webhook_service.update_webhook(
+            db, webhook_id, user.user_id,
+            url=body.url, events=body.events, secret=body.secret, is_active=body.is_active,
+        )
+    except ValueError as e:
+        raise HTTPException(404, {"code": 4044, "msg": str(e).split(":", 1)[-1]})
+    return Resp.ok(_wh_dict(wh))
+
+@router.get("/{webhook_id}/deliveries")
+async def list_deliveries(webhook_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    try:
+        deliveries = await webhook_service.list_deliveries(db, webhook_id, user.user_id)
+    except ValueError as e:
+        raise HTTPException(404, {"code": 4044, "msg": str(e).split(":", 1)[-1]})
+    return Resp.ok([_delivery_dict(d) for d in deliveries])
+
+def _delivery_dict(d) -> dict:
+    return {
+        "delivery_id": d.delivery_id, "webhook_id": d.webhook_id, "event": d.event,
+        "status_code": getattr(d, "status_code", None),
+        "payload_json": getattr(d, "payload_json", None),
+        "created_at": d.created_at.isoformat() + "Z",
+    }
+
 def _wh_dict(wh) -> dict:
     return {
         "webhook_id": wh.webhook_id, "url": wh.url,

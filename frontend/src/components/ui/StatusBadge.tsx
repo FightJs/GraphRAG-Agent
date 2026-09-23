@@ -6,6 +6,7 @@ const MAP: Record<DocStatus, { label: string; cls: string }> = {
   indexing:  { label: '索引中', cls: 'bg-yellow-100 text-warning' },
   indexed:   { label: '已索引', cls: 'bg-green-100 text-success' },
   failed:    { label: '失败',   cls: 'bg-red-100 text-danger' },
+  cancelled: { label: '已取消', cls: 'bg-slate-100 text-slate-500' },
 }
 
 export default function StatusBadge({ status }: { status: DocStatus }) {

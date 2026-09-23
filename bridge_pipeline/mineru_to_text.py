@@ -105,6 +105,10 @@ def content_list_to_documents(
     if skip_types is None:
         skip_types = {"image", "equation", "interline_equation"}
 
+    def _block_text(block: dict) -> str:
+        # 官方规范字段为 content，兼容少数输出 text
+        return (block.get("content") or block.get("text") or "")
+
     content_file = Path(content_list_path)
     if not content_file.exists():
         raise FileNotFoundError(f"content_list.json not found: {content_list_path}")
@@ -123,7 +127,7 @@ def content_list_to_documents(
             continue
 
         # Skip images even if not explicitly listed
-        if block_type == "image" and block.get("text", "").strip() == "":
+        if block_type == "image" and _block_text(block).strip() == "":
             continue
 
         page_idx = block.get("page_idx", 0)
@@ -140,7 +144,7 @@ def content_list_to_documents(
             text_parts = []
             for block in pages[page_idx]:
                 block_type = block.get("type", "")
-                content = block.get("text", "")
+                content = _block_text(block)
 
                 if block_type == "text":
                     text_level = block.get("text_level", 0)
@@ -180,7 +184,7 @@ def content_list_to_documents(
 
         for block_idx, block in enumerate(all_blocks):
             block_type = block.get("type", "")
-            content = block.get("text", "")
+            content = _block_text(block)
 
             if block_type == "text" and block.get("text_level", 0) == 1:
                 # Start new section
@@ -226,7 +230,7 @@ def content_list_to_documents(
         for page_idx in sorted(pages.keys()):
             for block in pages[page_idx]:
                 block_type = block.get("type", "")
-                content = block.get("text", "")
+                content = _block_text(block)
 
                 if block_type == "text":
                     text_level = block.get("text_level", 0)

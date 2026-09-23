@@ -25,8 +25,23 @@ _SYSTEM_PROMPT = """你是专业的知识图谱抽取引擎。给定一段文档
 要求：
 - 每个 node 的 local_id 只在本段文本内唯一即可（如 n1, n2, n3...）
 - 只抽取文本中明确出现的实体和关系，不要编造
+- 不要输出 TABLE 或 IMAGE 类型（这两种类型由系统流水线按媒体结构独占写入）
 - 如果文本中没有可抽取的实体，返回 {"nodes": [], "edges": []}
 """
+
+# 流水线独占类型：文本抽取输出中的同名类型必须丢弃（SPEC-TABLE §7.4）
+_RESERVED_NODE_TYPES = {"TABLE", "IMAGE"}
+
+
+def sanitize_exclusive_types(nodes: list[dict]) -> list[dict]:
+    """丢弃文本抽取伪造的 TABLE/IMAGE 节点（类型独占权）。"""
+    kept: list[dict] = []
+    for node in nodes or []:
+        ntype = str(node.get("type", "")).strip().upper()
+        if ntype in _RESERVED_NODE_TYPES:
+            continue
+        kept.append(node)
+    return kept
 
 
 def _try_recover_json(content: str) -> dict | None:
@@ -81,7 +96,10 @@ async def _extract_chunk(api_key: str, chunk_text: str) -> dict:
         if not isinstance(data, dict):
             logger.warning("LLM returned non-dict: %r", data)
             return {"nodes": [], "edges": []}
-        return {"nodes": data.get("nodes") or [], "edges": data.get("edges") or []}
+        return {
+            "nodes": sanitize_exclusive_types(data.get("nodes") or []),
+            "edges": data.get("edges") or [],
+        }
     except Exception as exc:
         logger.error("KG extraction chunk failed: %s", exc, exc_info=True)
         return {"nodes": [], "edges": []}
@@ -97,10 +115,14 @@ def _merge_chunk_results(chunk_results: list[dict]) -> dict:
 
     for result in chunk_results:
         local_to_global: dict[str, str] = {}
-        for node in result["nodes"]:
+        for node in sanitize_exclusive_types(result["nodes"]):
             label = str(node.get("label", "")).strip()
             ntype = str(node.get("type", "OTHER")).strip().upper() or "OTHER"
             if not label:
+                continue
+            # 类型独占权：丢弃文本抽取伪造的 TABLE/IMAGE
+            if ntype in _RESERVED_NODE_TYPES:
+                logger.warning("KG extraction: dropping reserved type node label=%r type=%s", label, ntype)
                 continue
             key = (ntype, label)
             if key not in merged_nodes:
@@ -132,9 +154,11 @@ def _merge_chunk_results(chunk_results: list[dict]) -> dict:
     return {"nodes": list(merged_nodes.values()), "edges": merged_edges}
 
 
-async def extract_kg(doc_id: str, chunks: list[str], api_key: str) -> dict:
-    """对文档分块逐个调用 LLM 抽取，合并为知识图谱 JSON"""
-    selected = chunks[:MAX_CHUNKS_FOR_KG]
+async def extract_kg(doc_id: str, chunks: list, api_key: str) -> dict:
+    """对文档分块逐个调用 LLM 抽取，合并为知识图谱 JSON。chunks 支持 list[str] 或 list[dict]"""
+    from app.services import parsing_service
+    texts = parsing_service.chunks_as_texts(chunks)
+    selected = texts[:MAX_CHUNKS_FOR_KG]
     chunk_results = []
     for chunk_text in selected:
         if not chunk_text.strip():

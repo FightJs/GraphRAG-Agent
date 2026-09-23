@@ -60,6 +60,19 @@ export default function DocLibPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['docs', kbId] }); toast.success('文档已删除') },
   })
 
+  const batchIndexMut = useMutation({
+    mutationFn: (docIds: string[]) => docApi.batchIndex(docIds),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ['docs', kbId] })
+      const ok = result.tasks.length
+      const skipped = result.skipped.length
+      if (ok && skipped) toast.warning(`已启动 ${ok} 个索引任务，跳过 ${skipped} 个`)
+      else if (ok) toast.success(`已启动 ${ok} 个索引任务`)
+      else toast.warning('没有可启动的文档（可能正在索引中）')
+    },
+    onError: () => toast.error('批量启动索引失败'),
+  })
+
   const handleUpload = async (files: FileList | null) => {
     if (!files || !kbId) return
     setUploading(true)
@@ -124,6 +137,17 @@ export default function DocLibPage() {
           >
             <FolderUp size={14} />{batchUploading ? '批量上传中...' : '批量导入'}
           </button>
+          <button
+            onClick={() => {
+              const ids = docs.filter(d => d.status === 'uploaded' || d.status === 'failed').map(d => d.doc_id).slice(0, 10)
+              if (!ids.length) { toast.warning('没有待索引的文档'); return }
+              batchIndexMut.mutate(ids)
+            }}
+            disabled={batchIndexMut.isPending || uploading || batchUploading}
+            className="flex items-center gap-1.5 h-8 px-3.5 border border-border text-tp rounded-lg text-xs font-semibold hover:bg-bg disabled:opacity-60"
+          >
+            <Play size={14} />{batchIndexMut.isPending ? '启动中...' : '批量索引'}
+          </button>
         </div>
       </div>
 
@@ -184,6 +208,7 @@ export default function DocLibPage() {
                   onDelete={() => deleteMut.mutate(doc.doc_id)}
                   onKG={() => navigate(`/kb/${kbId}/doc/${doc.doc_id}/kg`)}
                   onQA={() => navigate(`/kb/${kbId}/doc/${doc.doc_id}/qa`)}
+                  onDetail={() => navigate(`/kb/${kbId}/doc/${doc.doc_id}`)}
                 />
               ))}
             </tbody>
@@ -194,7 +219,7 @@ export default function DocLibPage() {
   )
 }
 
-function DocRow({ doc, kbId, onIndex, onDelete, onKG, onQA }: { doc: Document; kbId: string; onIndex: () => void; onDelete: () => void; onKG: () => void; onQA: () => void }) {
+function DocRow({ doc, kbId, onIndex, onDelete, onKG, onQA, onDetail }: { doc: Document; kbId: string; onIndex: () => void; onDelete: () => void; onKG: () => void; onQA: () => void; onDetail: () => void }) {
   const [menu, setMenu] = useState(false)
   const fmt = doc.file_format.toUpperCase()
   const color = FMT_COLOR[fmt] ?? '#94A3B8'
@@ -206,7 +231,8 @@ function DocRow({ doc, kbId, onIndex, onDelete, onKG, onQA }: { doc: Document; k
       <td className="py-3 px-4">
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center justify-center w-9 h-5 rounded text-[10px] font-bold" style={{ background: color + '20', color }}>{fmt}</span>
-          <span className="text-tp font-medium truncate max-w-xs">{doc.original_name}</span>
+          <button type="button" onClick={onDetail}
+            className="text-tp font-medium truncate max-w-xs hover:text-primary text-left" title="查看详情">{doc.original_name}</button>
         </div>
       </td>
       <td className="py-3 px-3 text-ts">{fmt}</td>

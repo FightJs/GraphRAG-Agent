@@ -55,7 +55,7 @@ async def history(
     records = await qa_service.get_history(db, user.user_id, kb_id, doc_id)
     return Resp.ok([{
         "query_id": r.query_id, "doc_id": r.doc_id, "kb_id": r.kb_id,
-        "question": r.question, "answer": r.answer[:200] + "..." if len(r.answer) > 200 else r.answer,
+        "question": r.question, "answer": r.answer,
         "retrieval_mode": r.retrieval_mode, "input_tokens": r.input_tokens, "output_tokens": r.output_tokens,
         "created_at": r.created_at.isoformat() + "Z",
     } for r in records])

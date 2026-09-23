@@ -58,8 +58,14 @@ async def delete_doc(db: AsyncSession, doc_id: str, owner_id: str) -> None:
     upload_dir = Path(settings.UPLOAD_DIR) / doc_id
     if upload_dir.exists():
         shutil.rmtree(upload_dir)
+    media_dir = Path(settings.MEDIA_DIR) / doc_id
+    if media_dir.exists():
+        shutil.rmtree(media_dir)
     kg_file = Path(settings.KG_DIR) / f"{doc_id}.json"
     if kg_file.exists():
         kg_file.unlink()
+    chunks_file = Path(settings.CHUNKS_DIR) / f"{doc_id}.json"
+    if chunks_file.exists():
+        chunks_file.unlink()
     await db.delete(doc)
     await db.commit()

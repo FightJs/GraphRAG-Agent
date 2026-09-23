@@ -23,6 +23,9 @@ uploads/
 results/
 *.pdf
 
+# local tooling artifacts
+.playwright-cli/
+
 # local agent instructions and embedded third-party checkout
 CLAUDE.md
 .claude/

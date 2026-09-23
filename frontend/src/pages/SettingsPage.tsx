@@ -2,26 +2,27 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/authStore'
 import { useToast } from '@/hooks/useToast'
-import { apiKeyApi, webhookApi } from '@/services/api'
-import type { ApiKeyProvider, WebhookCreatePayload } from '@/types'
-import { User, Lock, Key, Bell, Webhook, Plus, Trash2, Construction, ExternalLink } from 'lucide-react'
-
-function UndevelopedBadge({ text = '后端接口未实现' }: { text?: string }) {
-  return (
-    <div className="flex items-center gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl mb-6">
-      <Construction size={15} className="text-amber-600 flex-shrink-0" />
-      <p className="text-xs text-amber-700">{text}，此功能暂不可用</p>
-    </div>
-  )
-}
+import { authApi, apiKeyApi, webhookApi, notifyApi, systemApi } from '@/services/api'
+import type { ApiKeyProvider, WebhookCreatePayload, NotificationPreferences, NotificationPreferencesPatch } from '@/types'
+import { User, Lock, Key, Bell, Webhook, Plus, Trash2, ExternalLink, Activity } from 'lucide-react'
 
 export default function SettingsPage() {
   const user = useAuthStore(s => s.user)
+  const setUser = useAuthStore(s => s.setUser)
   const toast = useToast()
   const qc = useQueryClient()
   const [activeTab, setActiveTab] = useState('profile')
   const [selectedProvider, setSelectedProvider] = useState<ApiKeyProvider>('deepseek')
   const [apiKey, setApiKey] = useState('')
+
+  // Profile form
+  const [username, setUsername] = useState(user?.username ?? '')
+  const [email, setEmail] = useState(user?.email ?? '')
+
+  // Password form
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
 
   // Webhook form state
   const [whUrl, setWhUrl] = useState('')
@@ -34,6 +35,7 @@ export default function SettingsPage() {
     { id: 'apikey', icon: Key, label: 'API Key' },
     { id: 'webhook', icon: Webhook, label: 'Webhook' },
     { id: 'notify', icon: Bell, label: '通知设置' },
+    { id: 'system', icon: Activity, label: '系统状态' },
   ]
 
   // Webhooks
@@ -68,6 +70,40 @@ export default function SettingsPage() {
     setWhEvents(prev => prev.includes(ev) ? prev.filter(e => e !== ev) : [...prev, ev])
   }
 
+  // Profile
+  const updateMeMut = useMutation({
+    mutationFn: () => authApi.updateMe({ username, email }),
+    onSuccess: (updated) => {
+      if (user) setUser({ ...user, username: updated.username, email: updated.email })
+      toast.success('个人信息已保存')
+    },
+    onError: (error: any) => toast.error(error?.response?.data?.detail?.msg ?? '保存失败'),
+  })
+
+  // Change password
+  const changePwdMut = useMutation({
+    mutationFn: () => authApi.changePassword(currentPassword, newPassword),
+    onSuccess: () => {
+      setCurrentPassword(''); setNewPassword(''); setConfirmPassword('')
+      toast.success('密码已修改')
+    },
+    onError: (error: any) => toast.error(error?.response?.data?.detail?.msg ?? '密码修改失败'),
+  })
+
+  const handleChangePassword = () => {
+    if (newPassword.length < 8) { toast.error('新密码至少 8 位'); return }
+    if (newPassword !== confirmPassword) { toast.error('两次输入的新密码不一致'); return }
+    changePwdMut.mutate()
+  }
+
+  // System status
+  const { data: sysStatus, isLoading: sysLoading } = useQuery({
+    queryKey: ['system-status'],
+    queryFn: systemApi.status,
+    enabled: activeTab === 'system',
+    refetchInterval: 15000,
+  })
+
   const { data: keyStatus, isLoading: keyLoading } = useQuery({
     queryKey: ['api-key-status'], queryFn: apiKeyApi.status, enabled: activeTab === 'apikey',
   })
@@ -85,6 +121,33 @@ export default function SettingsPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['api-key-status'] }); toast.success('密钥已删除') },
     onError: () => toast.error('删除密钥失败'),
   })
+
+  // Notification preferences
+  const { data: notifyPrefs, isLoading: notifyLoading } = useQuery({
+    queryKey: ['notify-preferences'],
+    queryFn: notifyApi.getPreferences,
+    enabled: activeTab === 'notify',
+  })
+
+  const updateNotifyMut = useMutation({
+    mutationFn: (patch: NotificationPreferencesPatch) => notifyApi.updatePreferences(patch),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notify-preferences'] })
+      toast.success('通知偏好已保存')
+    },
+    onError: () => toast.error('通知偏好保存失败'),
+  })
+
+  const notifyItems: { key: keyof NotificationPreferences; label: string; desc: string }[] = [
+    { key: 'index_completed', label: '索引完成通知', desc: '文档索引完成时发送站内通知' },
+    { key: 'index_failed', label: '索引失败通知', desc: '索引过程发生错误时提醒' },
+    { key: 'qa_weekly_digest', label: '问答历史统计', desc: '每周发送问答统计摘要' },
+  ]
+
+  const toggleNotify = (key: keyof NotificationPreferences) => {
+    if (!notifyPrefs) return
+    updateNotifyMut.mutate({ [key]: !notifyPrefs[key] })
+  }
 
   return (
     <div className="h-full flex">
@@ -104,52 +167,61 @@ export default function SettingsPage() {
       {/* Content */}
       <div className="flex-1 overflow-auto p-8">
 
-        {/* Profile — 后端无接口 */}
+        {/* Profile — 已接入 PATCH /api/v2/auth/me */}
         {activeTab === 'profile' && (
           <div className="max-w-lg">
             <h2 className="text-xl font-bold text-tp mb-6">个人信息</h2>
-            <UndevelopedBadge text="个人信息修改接口（v2.0 规范未定义）" />
-            <div className="space-y-5 opacity-60 pointer-events-none">
+            <div className="space-y-5">
               <div className="flex items-center gap-5 mb-8">
                 <div className="w-20 h-20 rounded-full bg-primary flex items-center justify-center text-white text-3xl font-bold">
-                  {user?.username?.charAt(0) ?? 'U'}
+                  {(username || user?.username || 'U').charAt(0)}
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-tp">{user?.username}</p>
-                  <p className="text-xs text-ts">{user?.email}</p>
+                  <p className="text-sm font-semibold text-tp">{username || user?.username}</p>
+                  <p className="text-xs text-ts">{email || user?.email}</p>
                 </div>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-tp mb-1.5">用户名</label>
-                <input value={user?.username ?? ''} disabled
-                  className="w-full h-10 px-3 border border-border rounded-lg text-sm bg-bg text-ts cursor-not-allowed" />
+                <input value={username} onChange={e => setUsername(e.target.value)}
+                  className="w-full h-10 px-3 border border-border rounded-lg text-sm focus:outline-none focus:border-primary" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-tp mb-1.5">邮箱地址</label>
-                <input value={user?.email ?? ''} disabled
-                  className="w-full h-10 px-3 border border-border rounded-lg text-sm bg-bg text-ts cursor-not-allowed" />
+                <input value={email} onChange={e => setEmail(e.target.value)} type="email"
+                  className="w-full h-10 px-3 border border-border rounded-lg text-sm focus:outline-none focus:border-primary" />
               </div>
-              <button disabled className="h-10 px-6 bg-primary text-white rounded-lg text-sm font-semibold opacity-50 cursor-not-allowed">
-                保存修改
+              <button
+                onClick={() => updateMeMut.mutate()}
+                disabled={updateMeMut.isPending || (!username.trim() || !email.trim())}
+                className="h-10 px-6 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary-hover disabled:opacity-50">
+                {updateMeMut.isPending ? '保存中...' : '保存修改'}
               </button>
             </div>
           </div>
         )}
 
-        {/* Security — 后端无接口 */}
+        {/* Security — 已接入 POST /api/v2/auth/change-password */}
         {activeTab === 'security' && (
           <div className="max-w-lg">
             <h2 className="text-xl font-bold text-tp mb-6">账号安全</h2>
-            <UndevelopedBadge text="密码修改接口（v2.0 规范未定义）" />
-            <div className="space-y-4 opacity-60 pointer-events-none">
-              {['当前密码', '新密码', '确认新密码'].map(label => (
+            <div className="space-y-4">
+              {[
+                { label: '当前密码', value: currentPassword, set: setCurrentPassword },
+                { label: '新密码', value: newPassword, set: setNewPassword },
+                { label: '确认新密码', value: confirmPassword, set: setConfirmPassword },
+              ].map(({ label, value, set }) => (
                 <div key={label}>
                   <label className="block text-xs font-semibold text-tp mb-1.5">{label}</label>
-                  <input type="password" disabled className="w-full h-10 px-3 border border-border rounded-lg text-sm bg-bg cursor-not-allowed" />
+                  <input type="password" value={value} onChange={e => set(e.target.value)} autoComplete="new-password"
+                    className="w-full h-10 px-3 border border-border rounded-lg text-sm focus:outline-none focus:border-primary" />
                 </div>
               ))}
-              <button disabled className="h-10 px-6 bg-primary text-white rounded-lg text-sm font-semibold opacity-50 cursor-not-allowed">
-                修改密码
+              <button
+                onClick={handleChangePassword}
+                disabled={changePwdMut.isPending || !currentPassword || !newPassword || !confirmPassword}
+                className="h-10 px-6 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary-hover disabled:opacity-50">
+                {changePwdMut.isPending ? '修改中...' : '修改密码'}
               </button>
             </div>
           </div>
@@ -262,26 +334,115 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* Notify — 后端无接口 */}
+        {/* Notify — 已接入 /api/v2/settings/notifications/preferences */}
         {activeTab === 'notify' && (
           <div className="max-w-lg">
-            <h2 className="text-xl font-bold text-tp mb-6">通知设置</h2>
-            <UndevelopedBadge text="通知偏好设置接口（v2.0 规范未定义）" />
-            <div className="space-y-4 opacity-60 pointer-events-none">
-              {[
-                { label: '索引完成通知', desc: '文档索引完成时发送站内通知' },
-                { label: '索引失败通知', desc: '索引过程发生错误时提醒' },
-                { label: '问答历史统计', desc: '每周发送问答统计摘要' },
-              ].map(({ label, desc }) => (
-                <div key={label} className="flex items-center justify-between py-3 border-b border-border">
-                  <div>
-                    <p className="text-sm font-semibold text-tp">{label}</p>
-                    <p className="text-xs text-ts">{desc}</p>
-                  </div>
-                  <input type="checkbox" defaultChecked className="w-4 h-4 accent-primary" />
+            <h2 className="text-xl font-bold text-tp mb-2">通知设置</h2>
+            <p className="text-sm text-ts mb-6">管理站内通知偏好。开启后，对应事件会在顶栏通知铃铛中提醒。</p>
+            {notifyLoading ? (
+              <div className="space-y-2">{[...Array(3)].map((_, i) => <div key={i} className="h-16 rounded-xl skeleton" />)}</div>
+            ) : (
+              <div className="space-y-0">
+                {notifyItems.map(({ key, label, desc }) => {
+                  const checked = notifyPrefs?.[key] ?? false
+                  return (
+                    <div key={key} className="flex items-center justify-between py-4 border-b border-border">
+                      <div>
+                        <p className="text-sm font-semibold text-tp">{label}</p>
+                        <p className="text-xs text-ts mt-0.5">{desc}</p>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={checked}
+                        aria-label={label}
+                        disabled={updateNotifyMut.isPending}
+                        onClick={() => toggleNotify(key)}
+                        className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 disabled:opacity-50 ${
+                          checked ? 'bg-primary' : 'bg-border'
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                            checked ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* System status */}
+        {activeTab === 'system' && (
+          <div className="max-w-2xl">
+            <h2 className="text-xl font-bold text-tp mb-2">系统状态</h2>
+            <p className="text-sm text-ts mb-6">运行健康、存储与数据概况（每 15 秒自动刷新）。</p>
+            {sysLoading || !sysStatus ? (
+              <div className="space-y-3">{[...Array(4)].map((_, i) => <div key={i} className="h-20 rounded-xl skeleton" />)}</div>
+            ) : (
+              <div className="space-y-6">
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { label: '数据库', ok: sysStatus.database.ok },
+                    { label: '向量库', ok: sysStatus.vector_store.ok },
+                    { label: 'API 服务', ok: sysStatus.status === 'ok' },
+                  ].map(({ label, ok }) => (
+                    <div key={label} className="border border-border rounded-xl p-4 text-center">
+                      <div className={`w-2.5 h-2.5 rounded-full mx-auto mb-2 ${ok ? 'bg-success' : 'bg-danger'}`} />
+                      <p className="text-sm font-semibold text-tp">{label}</p>
+                      <p className="text-xs text-ts mt-1">{ok ? '正常' : '异常'}</p>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+
+                <div className="border border-border rounded-xl p-5">
+                  <p className="text-xs font-semibold text-ts mb-3">数据概况</p>
+                  <div className="grid grid-cols-3 gap-4">
+                    {[
+                      { label: '文档总数', value: sysStatus.stats.docs_total },
+                      { label: '已索引', value: sysStatus.stats.docs_indexed },
+                      { label: '索引中', value: sysStatus.stats.docs_indexing },
+                      { label: '失败', value: sysStatus.stats.docs_failed },
+                      { label: '用户', value: sysStatus.stats.users },
+                      { label: '问答记录', value: sysStatus.stats.qa_records },
+                    ].map(({ label, value }) => (
+                      <div key={label}>
+                        <p className="text-2xl font-bold text-tp tabular-nums">{value}</p>
+                        <p className="text-xs text-ts mt-0.5">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border border-border rounded-xl p-5">
+                  <p className="text-xs font-semibold text-ts mb-3">外部服务凭据</p>
+                  <div className="space-y-2">
+                    {Object.entries(sysStatus.providers).map(([name, state]) => (
+                      <div key={name} className="flex items-center justify-between text-sm">
+                        <span className="text-tp">{name}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${state === 'verified' ? 'bg-green-100 text-success' : 'bg-bg text-ts'}`}>
+                          {state === 'verified' ? '已验证' : '未配置'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-ts mt-3">
+                    MOCK 模式：{sysStatus.mock_external_services ? '开启（不调用真实外部 API）' : '关闭'}
+                  </p>
+                </div>
+
+                <div className="border border-border rounded-xl p-5 text-xs text-ts space-y-1 font-mono">
+                  <p>version: {sysStatus.version}</p>
+                  <p>milvus: {sysStatus.vector_store.uri}</p>
+                  <p>upload_dir: {sysStatus.storage.upload_dir}</p>
+                  <p>kg_dir: {sysStatus.storage.kg_dir}</p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

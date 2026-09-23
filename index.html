@@ -1,0 +1,182 @@
+<!-- AI生成 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GraphRAG Agent · 检索模式说明</title>
+  <style>
+    :root {
+      --bg: #fafafa;
+      --surface: #ffffff;
+      --ink: #1a1a1a;
+      --muted: #666666;
+      --line: #e5e5e5;
+      --green: #2d6a4f;
+      --navy: #1d3557;
+      --amber: #e07a2d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.6;
+    }
+    .wrap {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 40px 24px 64px;
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 600;
+      margin: 0 0 8px;
+    }
+    .sub {
+      color: var(--muted);
+      font-size: 13px;
+      margin: 0 0 28px;
+    }
+    .diagram {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 28px;
+    }
+    .diagram svg { width: 100%; height: auto; display: block; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      font-size: 13px;
+      margin-bottom: 28px;
+    }
+    th, td {
+      padding: 12px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    th {
+      background: #f3f3f3;
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    tr:last-child td { border-bottom: none; }
+    td:first-child { font-weight: 600; white-space: nowrap; }
+    .note {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px 18px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .note p { margin: 0 0 8px; }
+    .note p:last-child { margin: 0; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      background: #f0f0f0;
+      padding: 1px 5px;
+      border-radius: 4px;
+      color: var(--ink);
+    }
+  </style>
+</head>
+<body>
+<p data-aigc-mark="1" style="margin:0 0 8px;font-size:10px;line-height:1.3;color:#6b6560;font-weight:400;">AI生成</p>
+
+  <div class="wrap">
+    <h1>GraphRAG Agent · 三种检索模式</h1>
+    <p class="sub">单文档 / 知识库问答的材料来源与召回策略</p>
+
+    <div class="diagram">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 320" font-family="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+        <text x="40" y="28" font-size="14" font-weight="500" fill="#1a1a1a">单文档问答 · 三种检索模式</text>
+        <text x="40" y="52" font-size="11" fill="#666">材料来源与召回策略对比</text>
+
+        <text x="200" y="78" font-size="11" fill="#666" text-anchor="middle">KG 子图</text>
+        <text x="340" y="78" font-size="11" fill="#666" text-anchor="middle">向量召回</text>
+        <text x="480" y="78" font-size="11" fill="#666" text-anchor="middle">关键词召回</text>
+        <text x="600" y="78" font-size="11" fill="#666" text-anchor="middle">子查询分解</text>
+
+        <rect x="40" y="92" width="600" height="48" rx="8" fill="#f5f5f5" stroke="#ddd" stroke-width="0.5"/>
+        <text x="56" y="112" font-size="13" font-weight="500" fill="#1a1a1a">KG-Only</text>
+        <text x="56" y="128" font-size="11" fill="#666">仅图检索查关系</text>
+        <circle cx="200" cy="116" r="6" fill="#2d6a4f"/>
+        <circle cx="340" cy="116" r="6" fill="#ddd" stroke="#ccc" stroke-width="0.5"/>
+        <circle cx="480" cy="116" r="6" fill="#ddd" stroke="#ccc" stroke-width="0.5"/>
+        <circle cx="600" cy="116" r="6" fill="#ddd" stroke="#ccc" stroke-width="0.5"/>
+
+        <rect x="40" y="152" width="600" height="48" rx="8" fill="#f5f5f5" stroke="#ddd" stroke-width="0.5"/>
+        <text x="56" y="172" font-size="13" font-weight="500" fill="#1a1a1a">RRF Agentic</text>
+        <text x="56" y="188" font-size="11" fill="#666">子查分解 · 三路召回</text>
+        <circle cx="200" cy="176" r="6" fill="#2d6a4f"/>
+        <circle cx="340" cy="176" r="6" fill="#1d3557"/>
+        <circle cx="480" cy="176" r="6" fill="#1d3557"/>
+        <circle cx="600" cy="176" r="6" fill="#e07a2d"/>
+
+        <rect x="40" y="212" width="600" height="48" rx="8" fill="#f5f5f5" stroke="#ddd" stroke-width="0.5"/>
+        <text x="56" y="232" font-size="13" font-weight="500" fill="#1a1a1a">Auto</text>
+        <text x="56" y="248" font-size="11" fill="#666">节点 &gt;200 时切换</text>
+        <circle cx="200" cy="236" r="6" fill="#2d6a4f"/>
+        <circle cx="340" cy="236" r="6" fill="#bbb" stroke="#aaa" stroke-width="0.5"/>
+        <circle cx="480" cy="236" r="6" fill="#bbb" stroke="#aaa" stroke-width="0.5"/>
+        <circle cx="600" cy="236" r="6" fill="#bbb" stroke="#aaa" stroke-width="0.5"/>
+        <text x="270" y="240" font-size="10" fill="#888">≤200 → KG-Only</text>
+        <text x="360" y="240" font-size="10" fill="#888">→ &gt;200 走 RRF Agentic</text>
+
+        <circle cx="40" cy="300" r="4" fill="#2d6a4f"/>
+        <text x="52" y="304" font-size="10" fill="#666">固定使用</text>
+        <circle cx="120" cy="300" r="4" fill="#1d3557"/>
+        <text x="132" y="304" font-size="10" fill="#666">三路之一</text>
+        <circle cx="200" cy="300" r="4" fill="#e07a2d"/>
+        <text x="212" y="304" font-size="10" fill="#666">核心特征</text>
+        <circle cx="280" cy="300" r="4" fill="#bbb"/>
+        <text x="292" y="304" font-size="10" fill="#666">条件启用</text>
+      </svg>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>模式</th>
+          <th>策略</th>
+          <th>适用场景</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>KG-Only</td>
+          <td>仅图检索：问题命中实体后抽取两跳子图作答</td>
+          <td>问实体关系、结构关联</td>
+        </tr>
+        <tr>
+          <td>RRF Agentic</td>
+          <td>子查询分解 → 向量 / 关键词 / 知识图谱三路召回 → RRF 融合</td>
+          <td>复合问题、要原文细节</td>
+        </tr>
+        <tr>
+          <td>Auto</td>
+          <td>图节点 ≤200 走 KG-Only；&gt;200 自动切 RRF Agentic</td>
+          <td>不想手选时的默认</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      <p><strong>KG-Only</strong> 不注入原文片段，回答以图谱节点与关系为依据，无文档来源溯源。</p>
+      <p><strong>RRF Agentic</strong> 先把问题拆成最多 3 个子查询，每个子查询分别做向量召回与关键词召回，再与 KG 子图一起进入 RRF 融合排序，输出可溯源片段。</p>
+      <p><strong>Auto</strong> 只是策略开关，实际生效模式以 <code>retrieval_mode_used</code> 为准。旧名 <code>hybrid</code> / <code>semantic</code> 会映射到 <code>agentic</code>。</p>
+    </div>
+  </div>
+</body>
+</html>

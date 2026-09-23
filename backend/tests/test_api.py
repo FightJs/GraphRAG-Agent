@@ -102,6 +102,18 @@ class TestHealth:
         assert r.json()["data"]["status"] == "ok"
 
 
+class TestSystemStatus:
+    async def test_system_status(self, client, auth_headers):
+        r = await client.get("/api/v2/system/status", headers=auth_headers)
+        assert r.status_code == 200
+        data = r.json()["data"]
+        assert data["status"] == "ok"
+        assert data["database"]["ok"] is True
+        assert "stats" in data
+        assert "providers" in data
+        assert "docs_total" in data["stats"]
+
+
 # ════════════════════════════════════════════════════════════════════
 # § 2  Auth
 # ════════════════════════════════════════════════════════════════════
@@ -296,6 +308,26 @@ class TestIndexPipeline:
         assert r.status_code == 202
         assert len(r.json()["data"]["tasks"]) == 2
 
+    async def test_cancel_index_task(self, client, auth_headers, kb_id):
+        content = b"%PDF-1.4 cancel me"
+        r0 = await client.post(
+            "/api/v1/documents/upload",
+            files={"file": ("cancel_me.pdf", io.BytesIO(content), "application/pdf")},
+            data={"kb_id": kb_id},
+            headers=auth_headers,
+        )
+        tmp_id = r0.json()["data"]["doc_id"]
+        r = await client.post(f"/api/v1/documents/{tmp_id}/index", headers=auth_headers)
+        assert r.status_code == 202
+        task_id = r.json()["data"]["task_id"]
+        rc = await client.post(f"/api/v1/index/tasks/{task_id}/cancel", headers=auth_headers)
+        assert rc.status_code == 200
+        assert rc.json()["data"]["status"] in ("cancelling", "cancelled")
+
+    async def test_cancel_missing_task(self, client, auth_headers):
+        rc = await client.post("/api/v1/index/tasks/does-not-exist/cancel", headers=auth_headers)
+        assert rc.status_code == 404
+
 
 # ════════════════════════════════════════════════════════════════════
 # § 6  Knowledge Graph
@@ -363,6 +395,21 @@ class TestQA:
         assert "query_id" in data
         assert len(data["answer"]) > 0
         assert "token_usage" in data
+        assert data["retrieval_mode_used"] == "kg_only"
+        assert data.get("sources") == []
+
+    async def test_qa_sync_agentic_returns_sources(self, client, auth_headers, indexed_doc_id):
+        payload = {"doc_id": indexed_doc_id, "question": "候选人有哪些核心技能？", "stream": False,
+                   "options": {"retrieval_mode": "agentic"}}
+        r = await client.post("/api/v1/qa/query", json=payload, headers=auth_headers)
+        assert r.status_code == 200
+        data = r.json()["data"]
+        assert data["retrieval_mode_used"] == "agentic"
+        assert isinstance(data.get("sources"), list)
+        # mock 索引会写出 chunks；agentic 应至少带一条来源
+        assert len(data["sources"]) >= 1
+        src = data["sources"][0]
+        assert "doc_name" in src and "excerpt" in src and "page" in src
 
     async def test_qa_stream(self, client, auth_headers, indexed_doc_id):
         payload = {"doc_id": indexed_doc_id, "question": "他在哪家公司工作？", "stream": True,
@@ -407,7 +454,7 @@ class TestQA:
 
     async def test_kb_qa(self, client, auth_headers, indexed_doc_id, kb_id):
         payload = {"kb_id": kb_id, "doc_ids": [indexed_doc_id], "question": "综合分析候选人", "stream": False,
-                   "options": {"retrieval_mode": "hybrid"}}
+                   "options": {"retrieval_mode": "auto"}}
         r = await client.post("/api/v2/qa/kb-query", json=payload, headers=auth_headers)
         assert r.status_code == 200
 

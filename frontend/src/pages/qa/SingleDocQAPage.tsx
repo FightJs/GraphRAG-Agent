@@ -6,6 +6,7 @@ import { docApi, qaApi } from '@/services/api'
 import { useSSE } from '@/hooks/useSSE'
 import { useToast } from '@/hooks/useToast'
 import type { QAMessage, QASource, RetrievalMode } from '@/types'
+import MarkdownText from '@/components/ui/MarkdownText'
 import { clsx } from 'clsx'
 
 function SourcePanel({ sources }: { sources: QASource[] }) {
@@ -58,8 +59,7 @@ function MessageBubble({ msg, onFeedback }: { msg: QAMessage & { streaming?: boo
           </div>
         ) : (
           <div className="bg-surface border border-border rounded-2xl rounded-tl-sm px-4 py-3">
-            <div className={clsx('text-sm text-tp leading-relaxed whitespace-pre-wrap', msg.streaming && 'streaming-cursor')}
-              dangerouslySetInnerHTML={{ __html: msg.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>') }} />
+            <MarkdownText content={msg.content} className={clsx('text-sm text-tp leading-relaxed whitespace-pre-wrap', msg.streaming && 'streaming-cursor')} />
             {msg.sources && msg.sources.length > 0 && <SourcePanel sources={msg.sources} />}
             {!msg.streaming && msg.query_id && (
               <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
@@ -124,7 +124,7 @@ export default function SingleDocQAPage() {
 
     const stop = connect(
       '/api/v1/qa/query',
-      { doc_id: docId, question: q, retrieval_mode: mode, stream: true },
+      { doc_id: docId, question: q, stream: true, options: { retrieval_mode: mode } },
       {
         onDelta: (chunk) => setMessages(prev => {
           const arr = [...prev]
@@ -132,6 +132,9 @@ export default function SingleDocQAPage() {
           return arr
         }),
         onDone: (meta) => {
+          const modeUsed = (meta as { retrieval_mode_used?: string }).retrieval_mode_used
+          const rawSources = meta.sources as QASource[] | undefined
+          const showSources = modeUsed !== 'kg_only' && mode !== 'kg_only'
           setMessages(prev => {
             const arr = [...prev]
             arr[arr.length - 1] = {
@@ -139,7 +142,7 @@ export default function SingleDocQAPage() {
               streaming: false,
               query_id: meta.query_id,
               tokens: meta.tokens,
-              sources: meta.sources as QASource[] | undefined,
+              sources: showSources ? rawSources : undefined,
               finish_reason: meta.finish_reason,
             }
             return arr
@@ -178,10 +181,10 @@ export default function SingleDocQAPage() {
         </div>
         {/* Mode switch */}
         <div className="flex items-center gap-1 p-1 bg-bg border border-border rounded-lg">
-          {(['kg_only', 'hybrid'] as const).map((m) => (
+          {(['kg_only', 'agentic', 'auto'] as const).map((m) => (
             <button key={m} onClick={() => setMode(m)}
               className={clsx('h-7 px-3 rounded-md text-xs font-medium transition-colors', mode === m ? 'bg-primary text-white' : 'text-ts hover:text-tp')}>
-              {m === 'kg_only' ? 'KG-Only 模式' : '混合检索'}
+              {m === 'kg_only' ? 'KG-Only' : m === 'agentic' ? 'RRF Agentic' : 'Auto'}
             </button>
           ))}
         </div>
@@ -227,7 +230,7 @@ export default function SingleDocQAPage() {
               </button>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-ts">{mode === 'kg_only' ? 'KG-Only 模式' : '混合检索模式'}</span>
+              <span className="text-[10px] text-ts">{mode === 'kg_only' ? 'KG-Only · 仅图检索' : mode === 'agentic' ? 'RRF Agentic · 三路召回' : 'Auto · 节点>200 切换'}</span>
               {isStreaming ? (
                 <button onClick={stopStream} className="flex items-center gap-1.5 h-8 px-3.5 bg-slate-900 text-white rounded-lg text-xs font-semibold">
                   <Square size={11} /> 停止

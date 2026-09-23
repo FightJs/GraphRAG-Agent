@@ -61,3 +61,34 @@ async def login_user(db: AsyncSession, email: str, password: str) -> User:
     await db.commit()
     await db.refresh(user)
     return user
+
+async def change_password(db: AsyncSession, user_id: str, current_password: str, new_password: str) -> User:
+    result = await db.execute(select(User).where(User.user_id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise ValueError("4011:用户不存在")
+    if not verify_password(current_password, user.password_hash):
+        raise ValueError("4011:当前密码错误")
+    user.password_hash = hash_password(new_password)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+async def update_profile(db: AsyncSession, user_id: str, username: str | None = None, email: str | None = None) -> User:
+    result = await db.execute(select(User).where(User.user_id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise ValueError("4011:用户不存在")
+    if username is not None:
+        dup = await db.execute(select(User).where(User.username == username, User.user_id != user_id))
+        if dup.scalar_one_or_none():
+            raise ValueError("4092:该用户名已被使用")
+        user.username = username
+    if email is not None:
+        dup = await db.execute(select(User).where(User.email == email.lower(), User.user_id != user_id))
+        if dup.scalar_one_or_none():
+            raise ValueError("4092:该邮箱已被注册")
+        user.email = email.lower()
+    await db.commit()
+    await db.refresh(user)
+    return user

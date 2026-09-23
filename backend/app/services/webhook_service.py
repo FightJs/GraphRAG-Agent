@@ -34,6 +34,31 @@ async def delete_webhook(db: AsyncSession, webhook_id: str, owner_id: str):
     await db.delete(wh)
     await db.commit()
 
+async def update_webhook(db: AsyncSession, webhook_id: str, owner_id: str, *, url=None, events=None, secret=None, is_active=None) -> Webhook:
+    wh = await get_webhook(db, webhook_id, owner_id)
+    if url is not None:
+        wh.url = url
+    if events is not None:
+        wh.events_json = json.dumps(events)
+    if secret is not None:
+        wh.secret_plain = secret
+        wh.secret_hash = hashlib.sha256(secret.encode()).hexdigest() if secret else None
+    if is_active is not None:
+        wh.is_active = is_active
+    await db.commit()
+    await db.refresh(wh)
+    return wh
+
+async def list_deliveries(db: AsyncSession, webhook_id: str, owner_id: str, limit: int = 20) -> list[WebhookDelivery]:
+    wh = await get_webhook(db, webhook_id, owner_id)
+    result = await db.execute(
+        select(WebhookDelivery)
+        .where(WebhookDelivery.webhook_id == wh.webhook_id)
+        .order_by(WebhookDelivery.created_at.desc())
+        .limit(limit)
+    )
+    return list(result.scalars().all())
+
 async def dispatch_event(db: AsyncSession, owner_id: str, event: str, data: dict):
     """向订阅了该事件的所有 Webhook 投递通知"""
     result = await db.execute(select(Webhook).where(Webhook.owner_id == owner_id, Webhook.is_active == True))

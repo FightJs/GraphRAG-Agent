@@ -153,6 +153,13 @@ async def get_verified_secret(db: AsyncSession, user_id: str, provider: str) -> 
     return decrypt_secret(row.encrypted_secret)
 
 
+async def get_verified_secret_or_none(db: AsyncSession, user_id: str, provider: str) -> str | None:
+    try:
+        return await get_verified_secret(db, user_id, provider)
+    except ValueError:
+        return None
+
+
 async def verify_provider(provider: str, api_key: str) -> None:
     try:
         if provider == "deepseek":

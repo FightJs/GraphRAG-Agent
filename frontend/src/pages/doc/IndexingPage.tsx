@@ -1,8 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { CheckCircle, XCircle, Loader, ArrowLeft, Share2, MessageSquare } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { CheckCircle, XCircle, Loader, ArrowLeft, Share2, MessageSquare, X } from 'lucide-react'
 import { docApi } from '@/services/api'
+import { useToast } from '@/hooks/useToast'
 import { clsx } from 'clsx'
 
 const STAGE_LABELS = ['文档解析', 'Markdown 转换', '文本分块', 'KG 实体抽取', '向量化索引']
@@ -10,6 +11,9 @@ const STAGE_LABELS = ['文档解析', 'Markdown 转换', '文本分块', 'KG 实
 export default function IndexingPage() {
   const { kbId, docId, taskId } = useParams<{ kbId: string; docId: string; taskId: string }>()
   const navigate = useNavigate()
+  const toast = useToast()
+  const qc = useQueryClient()
+  const [cancelling, setCancelling] = useState(false)
 
   const { data: task } = useQuery({
     queryKey: ['task', taskId],
@@ -17,12 +21,24 @@ export default function IndexingPage() {
     enabled: !!taskId,
     refetchInterval: (q) => {
       const s = q.state.data?.status
-      return s === 'indexing' ? 1500 : false
+      return s === 'indexing' || s === 'cancelling' ? 1500 : false
     },
+  })
+
+  const cancelMut = useMutation({
+    mutationFn: () => docApi.cancel(taskId!),
+    onSuccess: () => {
+      setCancelling(true)
+      qc.invalidateQueries({ queryKey: ['task', taskId] })
+      toast.success('已请求取消索引')
+    },
+    onError: () => toast.error('取消失败'),
   })
 
   const isDone = task?.status === 'indexed'
   const isFailed = task?.status === 'failed'
+  const isCancelled = task?.status === 'cancelled'
+  const isRunning = task?.status === 'indexing' || task?.status === 'cancelling' || cancelling
   const progress = task?.progress ?? 0
 
   return (
@@ -35,19 +51,19 @@ export default function IndexingPage() {
       <div className="w-full max-w-xl bg-surface rounded-2xl border border-border p-8">
         {/* Progress number */}
         <div className="text-center mb-8">
-          <div className={clsx('text-7xl font-bold tabular-nums mb-2', isDone ? 'text-success' : isFailed ? 'text-danger' : 'text-primary')}>
-            {isDone ? '100' : isFailed ? '!' : progress}
-            {!isDone && !isFailed && <span className="text-2xl">%</span>}
+          <div className={clsx('text-7xl font-bold tabular-nums mb-2', isDone ? 'text-success' : isFailed || isCancelled ? 'text-danger' : 'text-primary')}>
+            {isDone ? '100' : isFailed || isCancelled ? '!' : progress}
+            {!isDone && !isFailed && !isCancelled && <span className="text-2xl">%</span>}
           </div>
           <p className="text-ts text-sm">
-            {isDone ? '索引完成 🎉' : isFailed ? '索引失败' : '正在构建知识图谱...'}
+            {isDone ? '索引完成 🎉' : isFailed ? '索引失败' : isCancelled ? '索引已取消' : task?.status === 'cancelling' ? '正在取消...' : '正在构建知识图谱...'}
           </p>
         </div>
 
         {/* Progress bar */}
         <div className="w-full h-2 bg-bg rounded-full mb-8">
           <div
-            className={clsx('h-2 rounded-full transition-all duration-500', isDone ? 'bg-success' : isFailed ? 'bg-danger' : 'bg-primary')}
+            className={clsx('h-2 rounded-full transition-all duration-500', isDone ? 'bg-success' : isFailed || isCancelled ? 'bg-danger' : 'bg-primary')}
             style={{ width: `${isDone ? 100 : progress}%` }}
           />
         </div>
@@ -88,6 +104,29 @@ export default function IndexingPage() {
               className="flex-1 flex items-center justify-center gap-2 h-10 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary-hover"
             >
               <MessageSquare size={15} /> 开始问答
+            </button>
+          </div>
+        )}
+
+        {isRunning && !isDone && (
+          <div className="flex gap-3 mt-8">
+            <button
+              onClick={() => cancelMut.mutate()}
+              disabled={cancelMut.isPending || task?.status === 'cancelling'}
+              className="flex-1 flex items-center justify-center gap-2 h-10 border border-danger text-danger rounded-lg text-sm font-semibold hover:bg-red-50 disabled:opacity-50"
+            >
+              <X size={15} /> {task?.status === 'cancelling' ? '取消中...' : '取消索引'}
+            </button>
+          </div>
+        )}
+
+        {(isFailed || isCancelled) && (
+          <div className="flex gap-3 mt-8">
+            <button
+              onClick={() => navigate(`/kb/${kbId}`)}
+              className="flex-1 h-10 border border-border rounded-lg text-sm text-tp hover:bg-bg"
+            >
+              返回文档库
             </button>
           </div>
         )}
