@@ -45,6 +45,7 @@ class KnowledgeBase(Base):
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     description: Mapped[str] = mapped_column(String(256), default="")
     color: Mapped[str] = mapped_column(String(16), default="blue")
+    icon: Mapped[str] = mapped_column(String(32), default="database")
     owner_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.user_id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)

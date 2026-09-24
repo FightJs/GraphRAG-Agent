@@ -160,11 +160,12 @@ class TestAuth:
 # ════════════════════════════════════════════════════════════════════
 class TestKnowledgeBase:
     async def test_create_kb(self, client, auth_headers):
-        r = await client.post("/api/v2/kbs", json={"name": "简历库-临时", "color": "purple"}, headers=auth_headers)
+        r = await client.post("/api/v2/kbs", json={"name": "简历库-临时", "color": "purple", "icon": "book"}, headers=auth_headers)
         assert r.status_code == 201
         data = r.json()["data"]
-        assert "kb_id" in data
+        assert data["icon"] == "book"
         assert data["color"] == "purple"
+        assert "kb_id" in data
         return data["kb_id"]
 
     async def test_create_kb_duplicate(self, client, auth_headers):
@@ -187,9 +188,11 @@ class TestKnowledgeBase:
         assert r.status_code == 404
 
     async def test_update_kb(self, client, auth_headers, kb_id):
-        r = await client.patch(f"/api/v2/kbs/{kb_id}", json={"name": "更新后知识库", "color": "green"}, headers=auth_headers)
+        r = await client.patch(f"/api/v2/kbs/{kb_id}", json={"name": "更新后知识库", "color": "green", "icon": "rocket"}, headers=auth_headers)
         assert r.status_code == 200
-        assert r.json()["data"]["color"] == "green"
+        data = r.json()["data"]
+        assert data["color"] == "green"
+        assert data["icon"] == "rocket"
 
     async def test_kb_requires_auth(self, client):
         r = await client.get("/api/v2/kbs")

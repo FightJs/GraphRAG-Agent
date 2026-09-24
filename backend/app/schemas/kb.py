@@ -6,17 +6,20 @@ class KBCreate(BaseModel):
     name: str
     description: str = ""
     color: str = "blue"
+    icon: str = "database"
 
 class KBUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     color: Optional[str] = None
+    icon: Optional[str] = None
 
 class KBOut(BaseModel):
     kb_id: str
     name: str
     description: str
     color: str
+    icon: str = "database"
     owner_id: str
     doc_count: int = 0
     indexed_count: int = 0

@@ -1,6 +1,7 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { FileText, Share2, MessageSquare, History, Settings, Database, ChevronsUpDown } from 'lucide-react'
+import { FileText, Share2, MessageSquare, History, Settings, ChevronsUpDown } from 'lucide-react'
+import KbIcon from '@/components/ui/KbIcon'
 import { clsx } from 'clsx'
 import { kbApi } from '@/services/api'
 
@@ -43,9 +44,7 @@ export default function SideNav() {
           title="切换知识库"
           className="w-full flex items-center gap-2 bg-primary/10 rounded-lg px-3 h-11 hover:bg-primary/15 transition-colors"
         >
-          <div className="w-6 h-6 rounded-md bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-            <Database size={13} className="text-blue-500" />
-          </div>
+          <KbIcon icon={currentKb?.icon} color={currentKb?.color || '#3B82F6'} size={13} box={24} radius={6} />
           <span className="flex-1 text-left text-sm font-semibold text-primary truncate">
             {currentKb?.name || (kbId ? '当前知识库' : '选择知识库')}
           </span>

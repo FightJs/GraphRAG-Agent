@@ -15,6 +15,7 @@ def _kb_dict(kb, stats: dict) -> dict:
         "name": kb.name,
         "description": kb.description,
         "color": kb.color,
+        "icon": getattr(kb, "icon", "database") or "database",
         "owner_id": kb.owner_id,
         "doc_count": stats.get("doc_count", 0),
         "indexed_count": stats.get("indexed_count", 0),

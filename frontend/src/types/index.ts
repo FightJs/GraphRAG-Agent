@@ -37,6 +37,7 @@ export interface KnowledgeBase {
   name: string
   description: string
   color: string
+  icon: string
   owner_id: string
   doc_count: number
   indexed_count: number
@@ -50,6 +51,7 @@ export interface KBCreatePayload {
   name: string
   description: string
   color: string
+  icon: string
 }
 
 // ───────────────────────── 文档 ─────────────────────────

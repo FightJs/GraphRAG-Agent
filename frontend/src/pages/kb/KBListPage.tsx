@@ -6,28 +6,59 @@ import { kbApi } from '@/services/api'
 import type { KnowledgeBase } from '@/types'
 import Modal from '@/components/ui/Modal'
 import EmptyState from '@/components/ui/EmptyState'
+import KbIcon, { KB_ICONS } from '@/components/ui/KbIcon'
 import { useToast } from '@/hooks/useToast'
 import { clsx } from 'clsx'
 
 const KB_COLORS = ['#3B82F6', '#8B5CF6', '#16A34A', '#F97316', '#EC4899', '#06B6D4']
 
-function KBCard({ kb, onDelete }: { kb: KnowledgeBase; onDelete: (id: string) => void }) {
+type KBForm = { name: string; description: string; color: string; icon: string }
+
+const emptyForm: KBForm = { name: '', description: '', color: KB_COLORS[0], icon: 'database' }
+
+function KBIconPicker({ value, color, onChange }: { value: string; color: string; onChange: (id: string) => void }) {
+  return (
+    <div className="grid grid-cols-7 gap-2">
+      {KB_ICONS.map(({ id, label }) => {
+        const selected = value === id
+        return (
+          <button
+            key={id}
+            type="button"
+            title={label}
+            onClick={() => onChange(id)}
+            className={clsx(
+              'h-12 rounded-lg flex items-center justify-center transition-all border',
+              selected ? 'border-primary ring-2 ring-primary/30' : 'border-border hover:border-primary/50'
+            )}
+            style={{ background: color + (selected ? '22' : '12') }}
+          >
+            <KbIcon icon={id} color={color} size={20} box={28} radius={8} />
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function KBCard({ kb, onDelete, onEdit }: { kb: KnowledgeBase; onDelete: (id: string) => void; onEdit: (kb: KnowledgeBase) => void }) {
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
     <div className="bg-surface border border-border rounded-xl p-6 hover:shadow-md transition-shadow flex flex-col gap-4">
       <div className="flex items-start justify-between">
-        <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: kb.color + '20' }}>
-          <Database size={22} style={{ color: kb.color }} />
-        </div>
+        <KbIcon icon={kb.icon} color={kb.color} />
         <div className="relative">
           <button onClick={() => setMenuOpen(!menuOpen)} className="text-ts hover:text-tp p-1 rounded">
             <MoreHorizontal size={18} />
           </button>
           {menuOpen && (
             <div className="absolute right-0 top-full mt-1 w-36 bg-surface border border-border rounded-xl shadow-lg py-1 z-10">
-              <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-tp hover:bg-bg">
+              <button
+                onClick={() => { onEdit(kb); setMenuOpen(false) }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-tp hover:bg-bg"
+              >
                 <Pencil size={13} className="text-ts" /> 编辑
               </button>
               <button
@@ -68,25 +99,107 @@ function KBCard({ kb, onDelete }: { kb: KnowledgeBase; onDelete: (id: string) =>
   )
 }
 
+function KBFormFields({ form, setForm }: { form: KBForm; setForm: (f: KBForm) => void }) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="block text-xs font-semibold text-tp mb-1.5">知识库名称 *</label>
+        <input
+          value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+          placeholder="例如：HR 简历库"
+          className="w-full h-10 px-3 border border-border rounded-lg text-sm focus:outline-none focus:border-primary"
+        />
+      </div>
+      <div>
+        <label className="block text-xs font-semibold text-tp mb-1.5">描述</label>
+        <textarea
+          value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
+          placeholder="简短描述该知识库的用途..."
+          rows={3}
+          className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary resize-none"
+        />
+      </div>
+      <div>
+        <label className="block text-xs font-semibold text-tp mb-2">头像图标</label>
+        <div className="flex items-center gap-3 mb-3">
+          <KbIcon icon={form.icon} color={form.color} size={26} box={52} radius={14} />
+          <div className="text-xs text-ts">
+            当前头像
+            <p className="text-[11px] text-ts/80 mt-0.5">从下方选择图标，颜色由「图标颜色」同步</p>
+          </div>
+        </div>
+        <KBIconPicker value={form.icon} color={form.color} onChange={(icon) => setForm({ ...form, icon })} />
+      </div>
+      <div>
+        <label className="block text-xs font-semibold text-tp mb-2">图标颜色</label>
+        <div className="flex gap-2 items-center">
+          {KB_COLORS.map((c) => (
+            <button
+              key={c} onClick={() => setForm({ ...form, color: c })}
+              className={clsx('w-8 h-8 rounded-full transition-all', form.color === c && 'ring-2 ring-offset-2 ring-gray-400')}
+              style={{ background: c }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function KBListPage() {
   const qc = useQueryClient()
   const toast = useToast()
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
-  const [form, setForm] = useState({ name: '', description: '', color: KB_COLORS[0] })
+  const [editing, setEditing] = useState<KnowledgeBase | null>(null)
+  const [form, setForm] = useState<KBForm>(emptyForm)
 
   const { data: kbs = [], isLoading } = useQuery({ queryKey: ['kbs'], queryFn: kbApi.list })
 
   const createMut = useMutation({
     mutationFn: kbApi.create,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['kbs'] }); setShowCreate(false); setForm({ name: '', description: '', color: KB_COLORS[0] }); toast.success('知识库创建成功') },
-    onError: () => toast.error('创建失败，请重试'),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['kbs'] })
+      setShowCreate(false); setForm(emptyForm)
+      toast.success('知识库创建成功')
+    },
+    onError: (error: any) => toast.error(error?.response?.data?.detail?.msg ?? '创建失败，请重试'),
+  })
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Partial<KBForm> }) => kbApi.update(id, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['kbs'] })
+      setEditing(null)
+      toast.success('知识库已更新')
+    },
+    onError: (error: any) => toast.error(error?.response?.data?.detail?.msg ?? '更新失败，请重试'),
   })
 
   const deleteMut = useMutation({
     mutationFn: kbApi.delete,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['kbs'] }); toast.success('知识库已删除') },
   })
+
+  const openCreate = () => {
+    setForm(emptyForm)
+    setShowCreate(true)
+  }
+
+  const openEdit = (kb: KnowledgeBase) => {
+    setForm({
+      name: kb.name,
+      description: kb.description || '',
+      color: kb.color || KB_COLORS[0],
+      icon: kb.icon || 'database',
+    })
+    setEditing(kb)
+  }
+
+  const submitEdit = () => {
+    if (!editing || !form.name.trim()) return
+    updateMut.mutate({ id: editing.kb_id, payload: form })
+  }
 
   const filtered = kbs.filter((k) => k.name.toLowerCase().includes(search.toLowerCase()))
 
@@ -122,7 +235,7 @@ export default function KBListPage() {
             />
           </div>
           <button
-            onClick={() => setShowCreate(true)}
+            onClick={openCreate}
             className="flex items-center gap-1.5 h-9 px-4 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary-hover transition-colors"
           >
             <Plus size={15} /> 新建知识库
@@ -144,7 +257,7 @@ export default function KBListPage() {
             title="暂无知识库"
             description="创建您的第一个知识库，开始智能问答"
             action={
-              <button onClick={() => setShowCreate(true)} className="h-9 px-5 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary-hover transition-colors">
+              <button onClick={openCreate} className="h-9 px-5 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary-hover transition-colors">
                 创建第一个知识库
               </button>
             }
@@ -152,7 +265,12 @@ export default function KBListPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
             {filtered.map((kb) => (
-              <KBCard key={kb.kb_id} kb={kb} onDelete={(id) => deleteMut.mutate(id)} />
+              <KBCard
+                key={kb.kb_id}
+                kb={kb}
+                onDelete={(id) => deleteMut.mutate(id)}
+                onEdit={openEdit}
+              />
             ))}
           </div>
         )}
@@ -166,7 +284,7 @@ export default function KBListPage() {
             <button onClick={() => setShowCreate(false)} className="h-9 px-4 border border-border rounded-lg text-sm text-ts hover:bg-bg">取消</button>
             <button
               onClick={() => createMut.mutate(form)}
-              disabled={!form.name || createMut.isPending}
+              disabled={!form.name.trim() || createMut.isPending}
               className="h-9 px-4 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary-hover disabled:opacity-50"
             >
               {createMut.isPending ? '创建中...' : '创建'}
@@ -174,37 +292,26 @@ export default function KBListPage() {
           </div>
         }
       >
-        <div className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-tp mb-1.5">知识库名称 *</label>
-            <input
-              value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="例如：HR 简历库"
-              className="w-full h-10 px-3 border border-border rounded-lg text-sm focus:outline-none focus:border-primary"
-            />
+        <KBFormFields form={form} setForm={setForm} />
+      </Modal>
+
+      {/* Edit Modal */}
+      <Modal
+        open={!!editing} onClose={() => setEditing(null)} title="编辑知识库"
+        footer={
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setEditing(null)} className="h-9 px-4 border border-border rounded-lg text-sm text-ts hover:bg-bg">取消</button>
+            <button
+              onClick={submitEdit}
+              disabled={!form.name.trim() || updateMut.isPending}
+              className="h-9 px-4 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary-hover disabled:opacity-50"
+            >
+              {updateMut.isPending ? '保存中...' : '保存修改'}
+            </button>
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-tp mb-1.5">描述</label>
-            <textarea
-              value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="简短描述该知识库的用途..."
-              rows={3}
-              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-primary resize-none"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-tp mb-2">图标颜色</label>
-            <div className="flex gap-2">
-              {KB_COLORS.map((c) => (
-                <button
-                  key={c} onClick={() => setForm({ ...form, color: c })}
-                  className={clsx('w-8 h-8 rounded-full transition-all', form.color === c && 'ring-2 ring-offset-2 ring-gray-400')}
-                  style={{ background: c }}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
+        }
+      >
+        <KBFormFields form={form} setForm={setForm} />
       </Modal>
     </div>
   )
