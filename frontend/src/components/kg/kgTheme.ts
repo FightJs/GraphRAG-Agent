@@ -8,6 +8,7 @@ export const NODE_COLOR: Record<string, string> = {
   COMPANY: '#F97316',
   SCHOOL: '#06B6D4',
   POSITION: '#EC4899',
+  LOCATION: '#0D9488', CONCEPT: '#8B5CF6', DATE: '#D97706', OTHER: '#64748B', __GROUP__: '#475569',
 }
 
 export const NODE_LABEL: Record<string, string> = {
@@ -17,9 +18,10 @@ export const NODE_LABEL: Record<string, string> = {
   COMPANY: '公司',
   SCHOOL: '学校',
   POSITION: '职位',
+  LOCATION: '地点', CONCEPT: '概念', DATE: '日期', OTHER: '其他', __GROUP__: '折叠分组',
 }
 
-export const TYPES = ['PERSON', 'SKILL', 'PROJECT', 'COMPANY', 'SCHOOL', 'POSITION'] as const
+export const TYPES = ['PERSON', 'SKILL', 'PROJECT', 'COMPANY', 'SCHOOL', 'POSITION', 'LOCATION', 'CONCEPT', 'DATE', 'OTHER'] as const
 
 export function nodeColor(type: string): string {
   return NODE_COLOR[type] ?? '#94A3B8'
@@ -30,7 +32,7 @@ export function nodeLabel(type: string): string {
 }
 
 export type SimNode = d3.SimulationNodeDatum & KGNode & { degree?: number }
-export type SimEdge = d3.SimulationLinkDatum<SimNode> & KGEdge & {
+export type SimEdge = d3.SimulationLinkDatum<SimNode> & Omit<KGEdge, 'source' | 'target'> & {
   pairTotal?: number
   pairIndex?: number
 }
@@ -44,6 +46,10 @@ export interface RenderKGOptions {
   onSelect?: (node: KGNode | null) => void
   showRelationLabels?: boolean
   markerId: string
+  degrees?: Map<string, number>
+  positions?: Map<string, { x: number; y: number }>
+  viewport?: { x: number; y: number; k: number }
+  onViewport?: (value: { x: number; y: number; k: number }) => void
 }
 
 export interface RenderKGHandle {
@@ -104,7 +110,7 @@ export function renderKGGraph(opts: RenderKGOptions): RenderKGHandle {
     selectedId: initialSelectedId,
     onSelect,
     showRelationLabels = true,
-    markerId,
+    markerId, degrees, positions, viewport, onViewport,
   } = opts
 
   const svg = d3.select(svgEl)
@@ -147,9 +153,9 @@ export function renderKGGraph(opts: RenderKGOptions): RenderKGHandle {
     pairSeen.set(k, (pairSeen.get(k) ?? 0) + 1)
   })
 
-  nodes.forEach(n => { n.degree = degree.get(n.id) ?? 0 })
-  const maxDegree = Math.max(1, ...nodes.map(n => n.degree ?? 0))
-  const radiusOf = (n: SimNode) => 16 + 10 * ((n.degree ?? 0) / maxDegree)
+  nodes.forEach(n => { n.degree = degrees?.get(n.id) ?? degree.get(n.id) ?? 0 })
+  const maxDegree = Math.max(1, ...Array.from(degrees?.values() ?? nodes.map(n => n.degree ?? 0)))
+  const radiusOf = (n: SimNode) => n.type === '__GROUP__' ? 23 : 14 + 20 * Math.log1p(n.degree ?? 0) / Math.log1p(maxDegree)
 
   const defs = svg.append('defs')
 
@@ -195,7 +201,8 @@ export function renderKGGraph(opts: RenderKGOptions): RenderKGHandle {
   svg.append('rect')
     .attr('width', width)
     .attr('height', height)
-    .attr('fill', `url(#${markerId}-dots)`)
+    .attr('class', 'kg-bg')
+    .attr('fill', `url(#${markerId}-dots` + ')')
 
   const root = svg.append('g').attr('class', 'kg-root')
 
@@ -286,6 +293,16 @@ export function renderKGGraph(opts: RenderKGOptions): RenderKGHandle {
     })
   }
 
+  if (layoutMode === 'force' && positions) {
+    nodes.forEach(n => {
+      const old = positions.get(n.id)
+      if (old) { n.x = old.x; n.y = old.y; return }
+      const incoming = edges.find(e => String(e.target) === n.id && positions.has(String(e.source)))
+      const parent = incoming && positions.get(String(incoming.source))
+      if (parent) { const angle = n.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0) * 2.4; n.x = parent.x + Math.cos(angle) * 70; n.y = parent.y + Math.sin(angle) * 70 }
+    })
+  }
+
   // 放宽布局：更长的边 + 更强斥力，节点不挤在一起
   const isForce = layoutMode === 'force'
   const sim = d3.forceSimulation<SimNode>(nodes)
@@ -314,8 +331,10 @@ export function renderKGGraph(opts: RenderKGOptions): RenderKGHandle {
     .scaleExtent([0.15, 3.5])
     .on('zoom', (event) => {
       root.attr('transform', event.transform.toString())
+      onViewport?.({ x: event.transform.x, y: event.transform.y, k: event.transform.k })
     })
   svg.call(zoom)
+  if (viewport) svg.call(zoom.transform, d3.zoomIdentity.translate(viewport.x, viewport.y).scale(viewport.k))
 
   let currentSelectedId: string | null = initialSelectedId ?? null
 
@@ -338,7 +357,7 @@ export function renderKGGraph(opts: RenderKGOptions): RenderKGHandle {
     .attr('stroke-linecap', 'round')
     .attr('marker-end', `url(#${markerId})`)
 
-  const showLabels = showRelationLabels && edges.length <= 100
+  const showLabels = showRelationLabels
   let labels: d3.Selection<SVGTextElement, SimEdge, SVGGElement, unknown> | null = null
   let labelBg: d3.Selection<SVGRectElement, SimEdge, SVGGElement, unknown> | null = null
 
@@ -373,6 +392,10 @@ export function renderKGGraph(opts: RenderKGOptions): RenderKGHandle {
     .data(nodes, d => d.id)
     .join('g')
     .style('cursor', 'pointer')
+    .attr('role', 'button')
+    .attr('tabindex', 0)
+    .attr('aria-label', d => `${d.label}，${nodeLabel(d.type)}`)
+    .on('keydown', function(event, d) { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); onSelect?.(d) } })
     .call(
       d3.drag<SVGGElement, SimNode>()
         .on('start', (event, d) => {
@@ -438,6 +461,7 @@ export function renderKGGraph(opts: RenderKGOptions): RenderKGHandle {
     .attr('stroke', '#FFFFFF')
     .attr('stroke-width', 2.4)
     .attr('filter', `url(#${markerId}-shadow)`)
+    .attr('stroke-dasharray', d => d.type === '__GROUP__' ? '4 3' : null)
 
   node.append('text')
     .attr('class', 'kg-label')
@@ -451,7 +475,7 @@ export function renderKGGraph(opts: RenderKGOptions): RenderKGHandle {
     .attr('paint-order', 'stroke')
     .attr('pointer-events', 'none')
     .text(d => {
-      const max = radiusOf(d) >= 22 ? 5 : 4
+      const max = d.type === '__GROUP__' ? 9 : radiusOf(d) >= 22 ? 6 : 5
       return d.label.length > max ? `${d.label.slice(0, max)}…` : d.label
     })
 
@@ -466,7 +490,7 @@ export function renderKGGraph(opts: RenderKGOptions): RenderKGHandle {
     .attr('stroke-width', 2.5)
     .attr('paint-order', 'stroke')
     .attr('dy', d => radiusOf(d) + 14)
-    .text(d => nodeLabel(d.type))
+    .text(d => d.type === '__GROUP__' ? '点击展开' : '')
 
   node
     .on('mouseenter', function () {
@@ -509,34 +533,38 @@ export function renderKGGraph(opts: RenderKGOptions): RenderKGHandle {
     link
       .attr('stroke', d => {
         if (!sel) return '#94A3B8'
-        const s = String(d.source)
-        const t = String(d.target)
+        const s = typeof d.source === 'object' ? d.source.id : String(d.source)
+        const t = typeof d.target === 'object' ? d.target.id : String(d.target)
         return s === sel || t === sel ? '#D97706' : '#CBD5E1'
       })
       .attr('stroke-opacity', d => {
         if (!sel) return 0.42
-        const s = String(d.source)
-        const t = String(d.target)
+        const s = typeof d.source === 'object' ? d.source.id : String(d.source)
+        const t = typeof d.target === 'object' ? d.target.id : String(d.target)
         return s === sel || t === sel ? 0.85 : 0.12
       })
       .attr('stroke-width', d => {
         if (!sel) return 1.35
-        const s = String(d.source)
-        const t = String(d.target)
+        const s = typeof d.source === 'object' ? d.source.id : String(d.source)
+        const t = typeof d.target === 'object' ? d.target.id : String(d.target)
         return s === sel || t === sel ? 2 : 1.1
       })
 
     if (labels && labelBg) {
+      const incident = edges.filter(d => sel && ((typeof d.source === 'object' ? d.source.id : String(d.source)) === sel || (typeof d.target === 'object' ? d.target.id : String(d.target)) === sel))
+      const labeledIds = new Set(incident.slice(0, 8).map(d => d.id))
+      labels.style('display', d => labeledIds.has(d.id) ? null : 'none')
+      labelBg.style('display', d => labeledIds.has(d.id) ? null : 'none')
       labels.attr('fill', d => {
         if (!sel) return '#64748B'
-        const s = String(d.source)
-        const t = String(d.target)
+        const s = typeof d.source === 'object' ? d.source.id : String(d.source)
+        const t = typeof d.target === 'object' ? d.target.id : String(d.target)
         return s === sel || t === sel ? '#92400E' : '#CBD5E1'
       })
       labelBg.attr('fill-opacity', d => {
         if (!sel) return 0.9
-        const s = String(d.source)
-        const t = String(d.target)
+        const s = typeof d.source === 'object' ? d.source.id : String(d.source)
+        const t = typeof d.target === 'object' ? d.target.id : String(d.target)
         return s === sel || t === sel ? 0.95 : 0.35
       })
     }
@@ -599,6 +627,7 @@ export function renderKGGraph(opts: RenderKGOptions): RenderKGHandle {
     }
 
     node.attr('transform', d => `translate(${d.x ?? 0},${d.y ?? 0})`)
+    nodes.forEach(n => { if (Number.isFinite(n.x) && Number.isFinite(n.y)) positions?.set(n.id, { x: n.x!, y: n.y! }) })
   })
 
   sim.alpha(0.7).restart()

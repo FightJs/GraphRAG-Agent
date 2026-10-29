@@ -9,12 +9,7 @@ import { useToast } from '@/hooks/useToast'
 import { clsx } from 'clsx'
 import Modal from '@/components/ui/Modal'
 
-const NODE_COLOR: Record<string, string> = {
-  PERSON: '#3B82F6', SKILL: '#22C55E', PROJECT: '#A855F7',
-  COMPANY: '#F97316', SCHOOL: '#06B6D4', POSITION: '#EC4899',
-}
-const TYPES = ['PERSON', 'SKILL', 'PROJECT', 'COMPANY', 'SCHOOL', 'POSITION']
-const TYPE_LABEL: Record<string, string> = { PERSON:'人物', SKILL:'技能', PROJECT:'项目', COMPANY:'公司', SCHOOL:'学校', POSITION:'职位' }
+import { NODE_COLOR, NODE_LABEL as TYPE_LABEL, TYPES } from '@/components/kg/kgTheme'
 
 const uid = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 const cloneGraph = (g: KGGraph): KGGraph => JSON.parse(JSON.stringify(g))
